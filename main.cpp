@@ -1,7 +1,8 @@
 #include <boost/asio.hpp>
-#include <boost/beast/http.hpp>
 #include <string>
+#include <string_view>
 #include <iostream>
+#include "request.cpp"
 
 using boost::asio::ip::tcp;
 
@@ -24,15 +25,10 @@ boost::asio::awaitable<void> handleRequest(tcp::socket socket)
 	boost::asio::streambuf sRequest;
 	std::cout<<" read request"<<std::endl;
 	co_await boost::asio::async_read_until(socket, sRequest, "\r\n\r\n", boost::asio::use_awaitable);
-	boost::beast::http::parser<true, boost::beast::http::string_body> parser;
-//Can cast request to std::string
-/*	std::string strRequest{boost::asio::buffer_cast<const char*>(sRequest.data()), sRequest.size()};
-//Or to beast http message
-	boost::system::error_code ec;
-	parser.put(sRequest.data(), ec);
-	auto parserRes=parser.release();
-	std::cout<<parserRes.target()<<std::endl;
-	std::cout<<"Request: "<<strRequest<<std::endl;*/
+	std::string strRequest{boost::asio::buffer_cast<const char*>(sRequest.data()), sRequest.size()};
+	Request *request=new Request(std::move(strRequest));
+	request->parse();
+	delete request;
 	const auto executor=co_await boost::asio::this_coro::executor;
 	boost::asio::co_spawn(executor, handleResponse(std::move(socket)), boost::asio::detached);
 }
