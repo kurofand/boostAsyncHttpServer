@@ -57,7 +57,7 @@ bool Request::parse()
 	if(line.find('?')!=std::string::npos)
 	{
 		std::stringstream sParams(line.substr(line.find('?')+1));
-		params_=new std::map<std::string, std::string>();
+		params_=new std::unordered_map<std::string, std::string>();
 		while(sParams.good())
 		{
 			std::string param;
@@ -66,16 +66,25 @@ bool Request::parse()
 			//if no '=' in name-val pair - skip
 			if(pos==std::string::npos)
 				continue;
+			std::string key=param.substr(0, pos);
 			std::string val=param.substr(pos+1);
-			params_->insert(std::pair<std::string, std::string>(param.substr(0, pos), urlDecode(std::move(val))));
+			if(params_->find(key)==params_->end())
+				params_->insert(std::pair<std::string, std::string>(key, urlDecode(std::move(val))));
+			else
+				params_->at(key)+=","+val;
 		}
 		line.erase(line.find('?'));
 	}
 	path_=line;
 	//first line parsed, parse headers
-	headers_=new std::map<std::string, std::string>();
+	headers_=new std::unordered_map<std::string, std::string>();
 	while(std::getline(s, line))
 	{
+		//reached end of headers if line starts from '\r'
+		if(line.at(0)=='\r')
+			break;
+		//had an issue with some browsers that added symbols to end of the line, so decided to erase lines
+		line.erase(line.begin()+line.rfind('\r'), line.end());
 		auto delimiter=line.find(':');
 		if(delimiter==std::string::npos)
 			continue;
@@ -84,6 +93,72 @@ bool Request::parse()
 		if(val[0]==' ')
 			val=val.substr(1);
 		headers_->insert(std::pair<std::string, std::string>(name, val));
+	}
+
+	//support form-data POST
+	if(method_==RequestMethod::POST)
+	{
+		std::string boundary="";
+		if(headers_->find("content-type")!=headers_->end())
+		{
+			boundary=headers_->at("content-type");
+			boundary=boundary.substr(boundary.find("=")+1);
+		}
+
+		data_=new std::vector<formData*>();
+		formData *data=nullptr;
+		bool readingHeader=false;
+		while(getline(s, line))
+		{
+			//\r\n should be the end of the POST body
+			if(line.at(0)=='\r')
+				break;
+			//skipping boundaries
+			//next line will be a next form entity
+			if(line.find(boundary)!=std::string::npos)
+			{
+				//if current form field is not the first one write data to vector and create new data
+				if(data!=nullptr)
+					data_->push_back(data);
+				data=new formData();
+				readingHeader=!readingHeader;
+				continue;
+			}
+			//searching for form headers - Content-Disposition, name(for regular form-data), fileName and Content-Type(for attached files)
+			if(readingHeader)
+			{
+				if(line.find("Content-Disposition")!=std::string::npos||line.find("Content-Type")!=std::string::npos)
+				{
+					if(line.find("Content-Disposition")!=std::string::npos)
+					{
+						data->fieldName=getFormHeaderVal(" name", &line);
+						data->fileName=getFormHeaderVal(" fileName", &line);
+					}
+					else if(line.find("Content-Type")!=std::string::npos)
+						data->contentType=line.substr(line.find(" "));
+				}
+				else
+					readingHeader=false;
+			}
+			//headers readed, reading form content
+			else
+			{
+				if(data->content==nullptr)
+					data->content=new std::string();
+				data->content->append(line);
+			}
+		}
+		/*last created data must be deleted to avoid leak:
+		multipart/form-data structure is
+			boundary
+			field headers
+			\n
+			field content
+			boundary
+			\r\n
+		I allocate new data on boundary, include the last one so last allocated data is empty and must be deleted
+		*/
+		delete data;
 	}
 	return true;
 }
@@ -106,11 +181,35 @@ std::string Request::urlDecode(std::string src)
 	return res;
 }
 
+std::string Request::getFormHeaderVal(const char*  headerName, std::string *line)
+{
+	std::string res;
+	auto pos=line->find(headerName);
+	if(pos!=std::string::npos)
+	{
+		res=line->substr(pos);
+		res.erase(0, strlen(headerName)+2);
+		res.erase(res.begin()+res.find('"'), res.end());
+	}
+	return std::move(res);
+}
+
 Request::~Request()
 {
 	if(params_!=nullptr)
 		delete params_;
 	if(headers_!=nullptr)
 		delete headers_;
+	if(data_!=nullptr)
+	{
+		for(auto &it:*data_)
+			if(it!=nullptr)
+			{
+				if(it->content!=nullptr)
+					delete it->content;
+				delete it;
+			}
+		delete data_;
+	}
 }
 
