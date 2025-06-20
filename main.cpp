@@ -5,21 +5,21 @@
 #include <iostream>
 
 #include "request.cpp"
+#include "response.cpp"
 
 using boost::asio::ip::tcp;
 
-boost::asio::awaitable<void> handleResponse(tcp::socket socket)
+boost::asio::awaitable<void> handleResponse(tcp::socket socket, Response *response)
 {
 	std::cout<<" prepare response"<<std::endl;
         boost::asio::streambuf sResponse;
         std::ostream oStream(&sResponse);
-        oStream<<"HTTP/1.0 200 OK\r\n"
-                <<"Content-Type: text/html; charset=UTF-8;"
-                <<"Content-Length: "<<2<<"\r\n\r\n"
-                <<"\r\n";
+	response->setContentLength();
+	response->toStream(oStream);
         std::cout<<" response prepared"<<std::endl;
         co_await boost::asio::async_write(socket, sResponse, boost::asio::use_awaitable);
 	socket.close();
+	delete response;
 }
 
 boost::asio::awaitable<void> handleRequest(tcp::socket socket)
@@ -75,8 +75,9 @@ III If there is Content-Length read until it's value.
 	Request *request=new Request(std::move(strRequest));
 	request->parse();
 	delete request;
+	Response *response=new Response();
 	const auto executor=co_await boost::asio::this_coro::executor;
-	boost::asio::co_spawn(executor, handleResponse(std::move(socket)), boost::asio::detached);
+	boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
 }
 
 boost::asio::awaitable<void> startListen()
