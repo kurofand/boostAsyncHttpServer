@@ -99,27 +99,38 @@ bool Request::parse()
 	if(method_==RequestMethod::POST)
 	{
 		std::string boundary="";
-		if(headers_->find("content-type")!=headers_->end())
+		if(headers_->find("Content-Type")!=headers_->end())
 		{
-			boundary=headers_->at("content-type");
+			boundary=headers_->at("Content-Type");
 			boundary=boundary.substr(boundary.find("=")+1);
 		}
 
-		data_=new std::vector<formData*>();
+		data_=new std::unordered_map<std::string, std::vector<formData*>*>();
 		formData *data=nullptr;
 		bool readingHeader=false;
+		std::string key;
 		while(getline(s, line))
 		{
-			//\r\n should be the end of the POST body
-			if(line.at(0)=='\r')
-				break;
+			//tested with curl and had to remove \r from back. this approach faster, but not safe - if problem occures change pop_back to erase
+			if(!line.empty())
+				line.pop_back();
+//			line.erase(line.begin()+line.rfind('\r'), line.end());
+
 			//skipping boundaries
 			//next line will be a next form entity
 			if(line.find(boundary)!=std::string::npos)
 			{
 				//if current form field is not the first one write data to vector and create new data
 				if(data!=nullptr)
-					data_->push_back(data);
+				{
+					if(!data_->contains(key))
+						data_->insert({key, new std::vector<formData*>()});
+					data_->at(key)->push_back(data);
+				}
+				//according to form documentation request closing boundary ends with "--",
+				//so no need to continue, just break
+				if(line.find(boundary+"--")!=std::string::npos)
+					break;
 				data=new formData();
 				readingHeader=!readingHeader;
 				continue;
@@ -131,7 +142,8 @@ bool Request::parse()
 				{
 					if(line.find("Content-Disposition")!=std::string::npos)
 					{
-						data->fieldName=getFormHeaderVal(" name", &line);
+//						data->fieldName=getFormHeaderVal(" name", &line);
+						key=getFormHeaderVal(" name", &line);
 						data->fileName=getFormHeaderVal(" fileName", &line);
 					}
 					else if(line.find("Content-Type")!=std::string::npos)
@@ -148,17 +160,7 @@ bool Request::parse()
 				data->content->append(line);
 			}
 		}
-		/*last created data must be deleted to avoid leak:
-		multipart/form-data structure is
-			boundary
-			field headers
-			\n
-			field content
-			boundary
-			\r\n
-		I allocate new data on boundary, include the last one so last allocated data is empty and must be deleted
-		*/
-		delete data;
+
 	}
 	return true;
 }
@@ -200,14 +202,20 @@ Request::~Request()
 		delete params_;
 	if(headers_!=nullptr)
 		delete headers_;
+
 	if(data_!=nullptr)
 	{
-		for(auto &it:*data_)
-			if(it!=nullptr)
+		for(auto &[key, val]:*data_)
+			if(val!=nullptr)
 			{
-				if(it->content!=nullptr)
-					delete it->content;
-				delete it;
+				for(auto &it:*data_->at(key))
+					if(it!=nullptr)
+					{
+						if(it->content!=nullptr)
+							delete it->content;
+						delete it;
+					}
+				delete val;
 			}
 		delete data_;
 	}

@@ -18,11 +18,12 @@ enum class RequestMethod
 
 struct formData
 {
-	std::string fieldName;
+//	std::string fieldName;
 	std::string fileName, contentType;
 	std::string *content;
 
-	void clear(){fieldName=""; fileName=""; contentType=""; content=nullptr;}
+//	void clear(){fieldName=""; fileName=""; contentType=""; content=nullptr;}
+	void clear(){fileName=""; contentType=""; content=nullptr;}
 };
 
 class Request
@@ -36,7 +37,8 @@ class Request
 		std::unordered_map<std::string, std::string>* params(){return params_;}
 		std::unordered_map<std::string, std::string>* headers(){return headers_;}
 //		std::unordered_map<std::string, std::string*>* data(){return data_;}
-		std::vector<formData*>* data(){return data_;}
+//		std::vector<formData*>* data(){return data_;}
+		std::unordered_map<std::string, std::vector<formData*>*>* data(){return data_;}
 		~Request();
 
 	private:
@@ -48,7 +50,8 @@ class Request
 		std::unordered_map<std::string, std::string> *params_=nullptr;
 		std::unordered_map<std::string, std::string> *headers_=nullptr;
 //		std::unordered_map<std::string, std::string*> *data_=nullptr;
-		std::vector<formData*> *data_=nullptr;
+		std::unordered_map<std::string, std::vector<formData*>*> *data_=nullptr;
+//		std::vector<formData*> *data_=nullptr;
 
 		std::string getFormHeaderVal(const char* headerName, std::string *line);
 };
