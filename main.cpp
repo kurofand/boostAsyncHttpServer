@@ -36,7 +36,9 @@ III If there is Content-Length read until it's value.
 	If there is no then request is short and we have alredy readed it.
 */
 	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, boost::regex("^\r\n"), boost::asio::use_awaitable);
-	std::string strRequest{boost::asio::buffer_cast<const char*>(sRequest.data()), bytesTransferred};
+//	std::string strRequest{boost::asio::buffer_cast<const char*>(sRequest.data()), bytesTransferred};
+	auto bufs=sRequest.data();
+	std::string strRequest{boost::asio::buffers_begin(bufs), boost::asio::buffers_begin(bufs)+bytesTransferred};
 
 	unsigned int contentLength=0;
 	if(strRequest.find("Content-Length")!=std::string::npos)
@@ -51,7 +53,9 @@ III If there is Content-Length read until it's value.
 //	consume it from the stream and then read with loop the rest.
 	sRequest.consume(bytesTransferred);
 	auto alreadyTransferredBody=sRequest.size();
-	strRequest+=std::string{boost::asio::buffer_cast<const char*>(sRequest.data()), sRequest.size()};
+	bufs=sRequest.data();
+//	strRequest+=std::string{boost::asio::buffer_cast<const char*>(sRequest.data()), sRequest.size()};
+	strRequest+=std::string{boost::asio::buffers_begin(bufs), boost::asio::buffers_begin(bufs)+sRequest.size()};
 	sRequest.consume(sRequest.size());
 
 	if(strRequest.size()!=bytesTransferred+contentLength)
@@ -67,13 +71,16 @@ III If there is Content-Length read until it's value.
 				awaitBytes=contentLength-bytesTransferred;
 			auto iterationBytes=co_await boost::asio::async_read(socket, sRequest, boost::asio::transfer_exactly(awaitBytes), boost::asio::use_awaitable);
 			bytesTransferred+=iterationBytes;
-			strRequest+=std::string{boost::asio::buffer_cast<const char*>(sRequest.data()), iterationBytes};
+//			strRequest+=std::string{boost::asio::buffer_cast<const char*>(sRequest.data()), iterationBytes};
+			bufs=sRequest.data();
+			strRequest+=std::string{boost::asio::buffers_begin(bufs), boost::asio::buffers_begin(bufs)+iterationBytes};
 			sRequest.consume(iterationBytes);
 		}
 	}
 
 	Request *request=new Request(std::move(strRequest));
 	request->parse();
+	std::cout<<"Parsing complete"<<std::endl;
 	delete request;
 	Response *response=new Response();
 	const auto executor=co_await boost::asio::this_coro::executor;

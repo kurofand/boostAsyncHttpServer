@@ -16,47 +16,59 @@ bool Request::parse()
 	//get first line and try to recognize request method, path, params and protocol
 	std::getline(s, line);
 	std::size_t size=0;
+	std::cout<<"Parsing request...\n"<<"\tMethod: ";
 	if(method_==RequestMethod::NONE)
 		if(line.find("GET")!=std::string::npos)
 		{
+			std::cout<<"GET\n";
 			method_=RequestMethod::GET;
 			size=3;
 		}
 		else if(line.find("POST")!=std::string::npos)
 		{
+			std::cout<<"POST\n";
 			method_=RequestMethod::POST;
 			size=4;
 		}
 		else if(line.find("HEAD")!=std::string::npos)
 		{
+			std::cout<<"HEAD\n";
 			method_=RequestMethod::HEAD;
 			size=4;
 		}
 		else if(line.find("PUT")!=std::string::npos)
 		{
+			std::cout<<"PUT\n";
 			method_=RequestMethod::PUT;
 			size=3;
 		}
 		else if(line.find("CONNECT")!=std::string::npos)
 		{
+			std::cout<<"CONNECT\n";
 			method_=RequestMethod::CONNECT;
 			size=7;
 		}
 		else if(line.find("OPTIONS")!=std::string::npos)
 		{
+			std::cout<<"OPTIONS\n";
 			method_=RequestMethod::OPTIONS;
 			size=7;
 		}
 		else
+		{
+			std::cout<<"Failed to parse method, aborting\n";
 			return false;
+		}
 	line.erase(0, size+1);
 	protocol_=line.substr(line.rfind(' ')+1);
+	std::cout<<"\tProtocol: "<<protocol_<<std::endl;;
 	if(protocol_.find("HTTP")==std::string::npos)
 		return false;
 	line.erase(line.rfind(' '));
 	if(line.find('?')!=std::string::npos)
 	{
-		std::stringstream sParams(line.substr(line.find('?')+1));
+		std::cout<<"\tFound params, parsing...\n";
+/*		std::stringstream sParams(line.substr(line.find('?')+1));
 		params_=new std::unordered_map<std::string, std::string>();
 		while(sParams.good())
 		{
@@ -72,12 +84,20 @@ bool Request::parse()
 				params_->insert(std::pair<std::string, std::string>(key, urlDecode(std::move(val))));
 			else
 				params_->at(key)+=","+val;
-		}
+		}*/
+		if(params_==nullptr)
+			params_=new std::unordered_map<std::string, std::string>();
+		const std::string paramsLine(line.substr(line.find('?')+1));
+		fillMapFromString(paramsLine, '&', params_);
+		for(const auto& [key, val]: *params_)
+			std::cout<<"\t\t\""<<key<<"\": \""<<val<<"\"\n";
 		line.erase(line.find('?'));
 	}
 	path_=line;
 	//first line parsed, parse headers
-	headers_=new std::unordered_map<std::string, std::string>();
+	std::cout<<"\tParsing headers...\n";
+	if(headers_==nullptr)
+		headers_=new std::unordered_map<std::string, std::string>();
 	while(std::getline(s, line))
 	{
 		//reached end of headers if line starts from '\r'
@@ -92,12 +112,28 @@ bool Request::parse()
 		auto val=line.substr(delimiter+1);
 		if(val[0]==' ')
 			val=val.substr(1);
+		if(name=="Cookie")
+		{
+			std::cout<<"\tFound Cookies, parsing...\n";
+			if(cookies_==nullptr)
+				cookies_=new std::unordered_map<std::string, std::string>();
+			const std::string sCookies=val;
+			fillMapFromString(sCookies, ';', cookies_);
+			std::cout<<"\tCookies:\n";
+			for(const auto& [key, val]: *cookies_)
+				std::cout<<"\t\t\""<<key<<"\": \""<<val<<"\"\n";
+			continue;
+		}
 		headers_->insert(std::pair<std::string, std::string>(name, val));
 	}
+	std::cout<<"\tHeaders:\n";
+	for(const auto& [key, val]: *headers_)
+		std::cout<<"\t\t\""<<key<<"\": \""<<val<<"\"\n";
 
 	//support form-data POST
 	if(method_==RequestMethod::POST)
 	{
+		std::cout<<"\tParsing form-data...\n";
 		std::string boundary="";
 		if(headers_->find("Content-Type")!=headers_->end())
 		{
@@ -194,6 +230,26 @@ std::string Request::getFormHeaderVal(const char*  headerName, std::string *line
 		res.erase(res.begin()+res.find('"'), res.end());
 	}
 	return std::move(res);
+}
+
+void Request::fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map)
+{
+	if(map==nullptr)
+		return;
+	std::stringstream sstream{str};
+	std::string line;
+	while(getline(sstream, line, delimiter))
+	{
+		std::size_t pos=line.find('=');
+		if(pos==std::string::npos)
+			continue;
+		std::string key=line.substr(0, pos);
+		std::string val=line.substr(pos+1);
+		if(map->find(key)==map->end())
+			map->insert(std::pair<std::string, std::string>(key, urlDecode(std::move(val))));
+		else
+			map->at(key)+=","+urlDecode(std::move(val));
+	}
 }
 
 Request::~Request()

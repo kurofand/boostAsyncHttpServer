@@ -36,6 +36,7 @@ class Request
 		std::string path(){return path_;}
 		std::unordered_map<std::string, std::string>* params(){return params_;}
 		std::unordered_map<std::string, std::string>* headers(){return headers_;}
+		std::unordered_map<std::string, std::string>* cookies(){return cookies_;}
 //		std::unordered_map<std::string, std::string*>* data(){return data_;}
 //		std::vector<formData*>* data(){return data_;}
 		std::unordered_map<std::string, std::vector<formData*>*>* data(){return data_;}
@@ -48,12 +49,14 @@ class Request
 		std::string protocol_;
 		std::string path_;
 		std::unordered_map<std::string, std::string> *params_=nullptr;
+		std::unordered_map<std::string, std::string> *cookies_=nullptr;
 		std::unordered_map<std::string, std::string> *headers_=nullptr;
 //		std::unordered_map<std::string, std::string*> *data_=nullptr;
 		std::unordered_map<std::string, std::vector<formData*>*> *data_=nullptr;
 //		std::vector<formData*> *data_=nullptr;
 
 		std::string getFormHeaderVal(const char* headerName, std::string *line);
+		void fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map);
 };
 
 #endif
