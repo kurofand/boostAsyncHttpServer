@@ -2,6 +2,9 @@
 #include <iostream>
 #include <sstream>
 #include <stdio.h>
+
+#include <algorithm>
+#include <cstring>
 //#include <curl/curl.h>
 
 Request::Request(std::string_view body)
@@ -109,10 +112,12 @@ bool Request::parse()
 		if(delimiter==std::string::npos)
 			continue;
 		auto name=line.substr(0, delimiter);
+		std::transform(name.begin(), name.end(), name.begin(),
+			[](unsigned char c){return std::tolower(c);});
 		auto val=line.substr(delimiter+1);
 		if(val[0]==' ')
 			val=val.substr(1);
-		if(name=="Cookie")
+		if(name=="cookie")
 		{
 			std::cout<<"\tFound Cookies, parsing...\n";
 			if(cookies_==nullptr)
@@ -135,9 +140,9 @@ bool Request::parse()
 	{
 		std::cout<<"\tParsing form-data...\n";
 		std::string boundary="";
-		if(headers_->find("Content-Type")!=headers_->end())
+		if(headers_->find("content-type")!=headers_->end())
 		{
-			boundary=headers_->at("Content-Type");
+			boundary=headers_->at("content-type");
 			boundary=boundary.substr(boundary.find("=")+1);
 		}
 

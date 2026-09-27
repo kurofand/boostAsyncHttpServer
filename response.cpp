@@ -1,4 +1,5 @@
 #include "response.hpp"
+#include <ostream>
 
 //most common response codes and corresponding strings
 const std::unordered_map<uint16_t, std::string> Response::responseCodes=

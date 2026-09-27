@@ -4,8 +4,8 @@
 #include <string_view>
 #include <iostream>
 
-#include "request.cpp"
-#include "response.cpp"
+#include "request.hpp"
+#include "response.hpp"
 
 using boost::asio::ip::tcp;
 
