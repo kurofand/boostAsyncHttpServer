@@ -1,5 +1,5 @@
 #include <boost/asio.hpp>
-#include <boost/regex.hpp>
+//#include <boost/regex.hpp>
 #include <string>
 #include <string_view>
 #include <iostream>
@@ -35,23 +35,56 @@ II Find Content-Length header and get request size
 III If there is Content-Length read until it's value. 
 	If there is no then request is short and we have alredy readed it.
 */
-	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, boost::regex("^\r\n"), boost::asio::use_awaitable);
+//	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, boost::regex("^\r\n"), boost::asio::use_awaitable);
+	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, "\r\n\r\n", boost::asio::use_awaitable);
 //	std::string strRequest{boost::asio::buffer_cast<const char*>(sRequest.data()), bytesTransferred};
-	auto bufs=sRequest.data();
-	std::string strRequest{boost::asio::buffers_begin(bufs), boost::asio::buffers_begin(bufs)+bytesTransferred};
+
+	std::cout<<bytesTransferred<<std::endl;
+	std::string line;
+	std::istream is{&sRequest};
+	std::cout<<sRequest.size()<<std::endl;
+
+	auto *request=new Request();
+	request->parseHeaders(is, bytesTransferred);
+
+//	auto bufs=sRequest.data();
+//	std::string strRequest{boost::asio::buffers_begin(bufs), boost::asio::buffers_begin(bufs)+bytesTransferred};
 
 	unsigned int contentLength=0;
-	if(strRequest.find("Content-Length")!=std::string::npos)
+	if(request->headers()!=nullptr&&request->headers()->contains("content-length"))
 	{
-		auto contentLengthStr=strRequest.substr(strRequest.find("Content-Length"));
-		contentLengthStr=contentLengthStr.substr(contentLengthStr.find(' ')+1, contentLengthStr.find("\r")-16);
-		contentLength=std::stoi(contentLengthStr);
+		auto tmp=request->headers()->at("content-length");
+		try
+		{
+			contentLength=std::stoi(tmp);
+		}
+		catch(const std::exception &e)
+		{
+			std::cout<<"Failed to stoi content-length header, exception:\n\t\""<<e.what()<<"\"\n";
+		}
+
+//		sRequest.consume(bytesTransferred);
+		auto remainingStreamBytes=sRequest.size();
+		std::string body;
+		if(remainingStreamBytes>=contentLength)
+		{
+			
+		}
+		std::cout<<sRequest.size()<<std::endl;
 	}
+
+//	if(strRequest.find("Content-Length")!=std::string::npos)
+//	{
+//		auto contentLengthStr=strRequest.substr(strRequest.find("Content-Length"));
+//		contentLengthStr=contentLengthStr.substr(contentLengthStr.find(' ')+1, contentLengthStr.find("\r")-16);
+//		contentLength=std::stoi(contentLengthStr);
+//	}
+
 //boost's (async_)read_until reads even after delimiter, but returns size before delimiter. 
 //	Even we just wanted to read the headers it also reads part of body.
 //	So we have to save data that still in the stream first, 
 //	consume it from the stream and then read with loop the rest.
-	sRequest.consume(bytesTransferred);
+/*	sRequest.consume(bytesTransferred);
 	auto alreadyTransferredBody=sRequest.size();
 	bufs=sRequest.data();
 //	strRequest+=std::string{boost::asio::buffer_cast<const char*>(sRequest.data()), sRequest.size()};
@@ -78,8 +111,10 @@ III If there is Content-Length read until it's value.
 		}
 	}
 
-	Request *request=new Request(std::move(strRequest));
-	request->parse();
+	std::cout<<"\""<<strRequest<<"\""<<std::endl;
+
+//	Request *request=new Request(std::move(strRequest));
+//	request->parse();*/
 	std::cout<<"Parsing complete"<<std::endl;
 	delete request;
 	Response *response=new Response();

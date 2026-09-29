@@ -5,7 +5,6 @@
 #include <string>
 #include <string_view>
 #include <vector>
-
 enum class RequestMethod
 {
 	NONE=0,
@@ -13,6 +12,7 @@ enum class RequestMethod
 	POST,
 	HEAD,
 	PUT,
+	DELETE,
 	CONNECT,
 	OPTIONS
 };
@@ -30,8 +30,10 @@ struct formData
 class Request
 {
 	public:
+		Request(){};
 		Request(std::string_view body);
 		bool parse();
+		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
 		RequestMethod method(){return method_;}
 		std::string protocol(){return protocol_;}
 		std::string path(){return path_;}
@@ -58,6 +60,17 @@ class Request
 
 		std::string getFormHeaderVal(const char* headerName, std::string *line);
 		void fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map);
+
+		const static inline std::unordered_map<std::string, RequestMethod> methodMap_=
+		{
+			{"GET", RequestMethod::GET},
+			{"POST", RequestMethod::POST},
+			{"HEAD", RequestMethod::HEAD},
+			{"PUT", RequestMethod::PUT},
+			{"DELETE", RequestMethod::DELETE},
+			{"CONNECT", RequestMethod::CONNECT},
+			{"OPTIONS", RequestMethod::OPTIONS}
+		};
 };
 
 #endif

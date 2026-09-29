@@ -12,6 +12,105 @@ Request::Request(std::string_view body)
 	body_=body;
 }
 
+bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
+{
+	std::string line;
+	getline(is, line);
+	std::cout<<"Bytes to read: "<<bytesToRead<<std::endl;
+	auto readBytes=line.size()+1;
+	if(line.back()=='\r')
+		line.pop_back();
+
+	{
+	auto sp=line.find(' ');
+	if(sp==std::string::npos)
+	{
+		std::cout<<"Request line does not contain a space, aborting\n";
+		return false;
+	}
+	std::string method=line.substr(0, sp);
+	if(methodMap_.contains(method))
+		method_=methodMap_.at(method);
+	else
+	{
+		std::cout<<"Unknown HTTP method: \""<<method<<"\", aborting\n";
+		return false;
+	}
+
+	std::cout<<"Method: \""<<method<<"\"\n";
+	line.erase(0, sp+1);
+
+	sp=line.rfind(' ');
+	std::string proto=line.substr(sp+1);
+	if(!proto.starts_with("HTTP"))
+	{
+		std::cout<<"Unknown protocol: \""<<proto<<"\", aborting\n";
+		return false;
+	}
+	protocol_=proto;
+
+	std::cout<<"Proto: \""<<protocol_<<"\"\n";
+	line.erase(sp);
+	}
+
+	{
+	auto q=line.find('?');
+	if(q!=std::string::npos)
+	{
+		if(params_==nullptr)
+			params_=new std::unordered_map<std::string, std::string>();
+		const std::string params{line.substr(q+1)};
+		fillMapFromString(params, '&', params_);
+		line.erase(q);
+		std::cout<<"Params: \n";
+		for(const auto &[key, val]: *params_)
+			std::cout<<"\t\""<<key<<"\": \""<<val<<"\"\n";
+	}
+	path_=line;
+	std::cout<<"URI: \""<<path_<<"\"\n";
+	}
+
+	//single line request
+	if(readBytes==bytesToRead)
+		return true;
+
+	if(headers_==nullptr)
+		headers_=new std::unordered_map<std::string, std::string>();
+
+	while(readBytes<bytesToRead)
+	{
+		getline(is, line);
+		readBytes+=line.size()+1;
+		if(line.back()=='\r')
+			line.pop_back();
+		auto delimiter=line.find(':');
+		if(delimiter==std::string::npos)
+			continue;
+		auto name=line.substr(0, delimiter);
+		std::transform(name.begin(), name.end(), name.begin(),
+			[](unsigned char c){return std::tolower(c);});
+		auto val=line.substr(delimiter+1);
+		if(val[0]==' ')
+			val=val.substr(1);
+
+		if(name=="cookie")
+		{
+			if(cookies_==nullptr)
+				cookies_=new std::unordered_map<std::string, std::string>();
+			const std::string sCookies=val;
+			fillMapFromString(sCookies, ';', cookies_);
+			continue;
+		}
+
+		headers_->insert(std::pair<std::string, std::string>(name, val));
+	}
+	std::cout<<"Headers:\n";
+	for(const auto &[key, val]: *headers_)
+		std::cout<<"\t\""<<key<<"\": \""<<val<<"\"\n";
+
+	return true;
+}
+
 bool Request::parse()
 {
 	std::istringstream s(std::string{body_});
