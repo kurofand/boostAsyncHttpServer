@@ -7,6 +7,13 @@
 #include "request.hpp"
 #include "response.hpp"
 
+#ifndef HEADERS_SIZE_LIMIT
+#define HEADERS_SIZE_LIMIT 1024*16
+#endif
+#ifndef CONTENT_LENGTH_LIMIT
+#define CONTENT_LENGTH_LIMIT 1024*1024
+#endif
+
 using boost::asio::ip::tcp;
 
 boost::asio::awaitable<void> handleResponse(tcp::socket socket, Response *response)
@@ -24,7 +31,7 @@ boost::asio::awaitable<void> handleResponse(tcp::socket socket, Response *respon
 
 boost::asio::awaitable<void> handleRequest(tcp::socket socket)
 {
-	boost::asio::streambuf sRequest;
+	boost::asio::streambuf sRequest(HEADERS_SIZE_LIMIT);
 	std::cout<<" read request"<<std::endl;
 /*
 There was read request until \r\n\r\n. But if you have a large request, 
@@ -35,17 +42,26 @@ II Find Content-Length header and get request size
 III If there is Content-Length read until it's value. 
 	If there is no then request is short and we have alredy readed it.
 */
-//	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, boost::regex("^\r\n"), boost::asio::use_awaitable);
-	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, "\r\n\r\n", boost::asio::use_awaitable);
-//	std::string strRequest{boost::asio::buffer_cast<const char*>(sRequest.data()), bytesTransferred};
 
-	std::cout<<bytesTransferred<<std::endl;
-	std::string line;
+	boost::system::error_code ec;
+	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, "\r\n\r\n", boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+	auto *response=new Response();
+	if(ec)
+	{
+		//delimiter was not found and current buffer size is buffer size limit
+		if(ec==boost::asio::error::not_found&&sRequest.size()==HEADERS_SIZE_LIMIT)
+			response->responseCode(431);
+		else
+			response->responseCode(500);
+		const auto executor=co_await boost::asio::this_coro::executor;
+		boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
+		co_return;
+	}
 	std::istream is{&sRequest};
-	std::cout<<sRequest.size()<<std::endl;
 
 	auto *request=new Request();
 	request->parseHeaders(is, bytesTransferred);
+
 
 //	auto bufs=sRequest.data();
 //	std::string strRequest{boost::asio::buffers_begin(bufs), boost::asio::buffers_begin(bufs)+bytesTransferred};
@@ -53,7 +69,7 @@ III If there is Content-Length read until it's value.
 	unsigned int contentLength=0;
 	if(request->headers()!=nullptr&&request->headers()->contains("content-length"))
 	{
-		auto tmp=request->headers()->at("content-length");
+		const auto tmp=request->headers()->at("content-length");
 		try
 		{
 			contentLength=std::stoi(tmp);
@@ -62,15 +78,28 @@ III If there is Content-Length read until it's value.
 		{
 			std::cout<<"Failed to stoi content-length header, exception:\n\t\""<<e.what()<<"\"\n";
 		}
+		if(contentLength>CONTENT_LENGTH_LIMIT)
+		{
+			response->responseCode(413);
+			const auto executor=co_await boost::asio::this_coro::executor;
+			boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
+			co_return;
 
-//		sRequest.consume(bytesTransferred);
+		}
+
 		auto remainingStreamBytes=sRequest.size();
-		std::string body;
+		std::string body(contentLength, '\0');
 		if(remainingStreamBytes>=contentLength)
 		{
-			
+			is.read(&body[0], contentLength);
+			request->body(body);
 		}
-		std::cout<<sRequest.size()<<std::endl;
+		else
+		{
+			is.read(&body[0], remainingStreamBytes);
+			//TODO: async read remaining body, handle errors, etc
+		}
+
 	}
 
 //	if(strRequest.find("Content-Length")!=std::string::npos)
@@ -117,7 +146,7 @@ III If there is Content-Length read until it's value.
 //	request->parse();*/
 	std::cout<<"Parsing complete"<<std::endl;
 	delete request;
-	Response *response=new Response();
+//	Response *response=new Response();
 	const auto executor=co_await boost::asio::this_coro::executor;
 	boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
 }

@@ -32,6 +32,7 @@ class Request
 	public:
 		Request(){};
 		Request(std::string_view body);
+		void body(std::string_view sv){body_=sv;}
 		bool parse();
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
 		RequestMethod method(){return method_;}
@@ -48,7 +49,7 @@ class Request
 	private:
 		RequestMethod method_=RequestMethod::NONE;
 		std::string urlDecode(std::string src);
-		std::string_view body_;
+		std::string body_;
 		std::string protocol_;
 		std::string path_;
 		std::unordered_map<std::string, std::string> *params_=nullptr;
