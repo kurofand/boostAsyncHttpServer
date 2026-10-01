@@ -62,11 +62,8 @@ III If there is Content-Length read until it's value.
 	auto *request=new Request();
 	request->parseHeaders(is, bytesTransferred);
 
-
-//	auto bufs=sRequest.data();
-//	std::string strRequest{boost::asio::buffers_begin(bufs), boost::asio::buffers_begin(bufs)+bytesTransferred};
-
 	unsigned int contentLength=0;
+	const auto executor=co_await boost::asio::this_coro::executor;
 	if(request->headers()!=nullptr&&request->headers()->contains("content-length"))
 	{
 		const auto tmp=request->headers()->at("content-length");
@@ -77,14 +74,17 @@ III If there is Content-Length read until it's value.
 		catch(const std::exception &e)
 		{
 			std::cout<<"Failed to stoi content-length header, exception:\n\t\""<<e.what()<<"\"\n";
+			response->responseCode(400);
+			delete request;
+			boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
+			co_return;
 		}
 		if(contentLength>CONTENT_LENGTH_LIMIT)
 		{
 			response->responseCode(413);
-			const auto executor=co_await boost::asio::this_coro::executor;
+			delete request;
 			boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
 			co_return;
-
 		}
 
 		auto remainingStreamBytes=sRequest.size();
@@ -97,7 +97,15 @@ III If there is Content-Length read until it's value.
 		else
 		{
 			is.read(&body[0], remainingStreamBytes);
-			//TODO: async read remaining body, handle errors, etc
+			co_await boost::asio::async_read(socket, boost::asio::buffer(body.data()+remainingStreamBytes, contentLength-remainingStreamBytes), boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+			if(ec)
+			{
+			//TODO: add error details to logs if implement or at least to cout
+				response->responseCode(500);
+				delete request;
+				boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
+				co_return;
+			}
 		}
 
 	}
@@ -147,7 +155,7 @@ III If there is Content-Length read until it's value.
 	std::cout<<"Parsing complete"<<std::endl;
 	delete request;
 //	Response *response=new Response();
-	const auto executor=co_await boost::asio::this_coro::executor;
+	//const auto executor=co_await boost::asio::this_coro::executor;
 	boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
 }
 

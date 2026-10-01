@@ -35,6 +35,7 @@ class Request
 		void body(std::string_view sv){body_=sv;}
 		bool parse();
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
+		bool parseBody();
 		RequestMethod method(){return method_;}
 		std::string protocol(){return protocol_;}
 		std::string path(){return path_;}
