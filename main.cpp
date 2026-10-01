@@ -16,6 +16,7 @@
 
 using boost::asio::ip::tcp;
 
+
 boost::asio::awaitable<void> handleResponse(tcp::socket socket, Response *response)
 {
 	std::cout<<" prepare response"<<std::endl;
@@ -44,6 +45,7 @@ III If there is Content-Length read until it's value.
 */
 
 	boost::system::error_code ec;
+	const auto executor=co_await boost::asio::this_coro::executor;
 	auto bytesTransferred=co_await boost::asio::async_read_until(socket, sRequest, "\r\n\r\n", boost::asio::redirect_error(boost::asio::use_awaitable, ec));
 	auto *response=new Response();
 	if(ec)
@@ -53,17 +55,21 @@ III If there is Content-Length read until it's value.
 			response->responseCode(431);
 		else
 			response->responseCode(500);
-		const auto executor=co_await boost::asio::this_coro::executor;
 		boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
 		co_return;
 	}
 	std::istream is{&sRequest};
 
 	auto *request=new Request();
-	request->parseHeaders(is, bytesTransferred);
+	if(!request->parseHeaders(is, bytesTransferred))
+	{
+		delete request;
+		response->responseCode(400);
+		boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
+		co_return;
+	}
 
 	unsigned int contentLength=0;
-	const auto executor=co_await boost::asio::this_coro::executor;
 	if(request->headers()!=nullptr&&request->headers()->contains("content-length"))
 	{
 		const auto tmp=request->headers()->at("content-length");
@@ -90,10 +96,7 @@ III If there is Content-Length read until it's value.
 		auto remainingStreamBytes=sRequest.size();
 		std::string body(contentLength, '\0');
 		if(remainingStreamBytes>=contentLength)
-		{
 			is.read(&body[0], contentLength);
-			request->body(body);
-		}
 		else
 		{
 			is.read(&body[0], remainingStreamBytes);
@@ -107,6 +110,26 @@ III If there is Content-Length read until it's value.
 				co_return;
 			}
 		}
+		request->body(body);
+		std::cout<<"\""<<body<<"\""<<std::endl;
+
+		auto const currentStatus=request->parseBody();
+		if(currentStatus!=200)
+		{
+			response->responseCode(currentStatus);
+			delete request;
+			boost::asio::co_spawn(executor, handleResponse(std::move(socket), response), boost::asio::detached);
+			co_return;
+		}
+/*		if(request->formData()!=nullptr)
+			for(const auto &[key, val]: *request->formData())
+			{
+				std::cout<<"\""<<key<<"\": ";
+				for(const auto &e: *val)
+					std::cout<<"\""<<e<<"\",";
+				std::cout<<std::endl;
+			}*/
+
 
 	}
 

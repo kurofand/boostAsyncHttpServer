@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <cstdint>
+
 enum class RequestMethod
 {
 	NONE=0,
@@ -17,7 +19,16 @@ enum class RequestMethod
 	OPTIONS
 };
 
-struct formData
+enum class ContentType
+{
+	NONE=0,
+	TEXT_PLAIN,
+	APPLICATION_JSON,
+	APPLICATION_X_WWW_FORM_URLENCODED,
+	MULTIPART_FORM_DATA
+};
+
+struct MultipartFormData
 {
 //	std::string fieldName;
 	std::string fileName, contentType;
@@ -35,7 +46,11 @@ class Request
 		void body(std::string_view sv){body_=sv;}
 		bool parse();
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
-		bool parseBody();
+		//uint16_t to return parsing state with HTTP response codes:
+		//200 - parsing complete w/o issues;
+		//400 - incorrect body format(e.g. invalid JSON);
+		//415 - unsupported content type, etc
+		uint16_t parseBody();
 		RequestMethod method(){return method_;}
 		std::string protocol(){return protocol_;}
 		std::string path(){return path_;}
@@ -44,11 +59,13 @@ class Request
 		std::unordered_map<std::string, std::string>* cookies(){return cookies_;}
 //		std::unordered_map<std::string, std::string*>* data(){return data_;}
 //		std::vector<formData*>* data(){return data_;}
-		std::unordered_map<std::string, std::vector<formData*>*>* data(){return data_;}
+		std::unordered_map<std::string, std::vector<std::string>*>* formData(){return formData_;}
+		std::unordered_map<std::string, std::vector<MultipartFormData*>*>* multipartFormData(){return multipartFormData_;}
 		~Request();
 
 	private:
 		RequestMethod method_=RequestMethod::NONE;
+		ContentType contentType_=ContentType::NONE;
 		std::string urlDecode(std::string src);
 		std::string body_;
 		std::string protocol_;
@@ -57,13 +74,15 @@ class Request
 		std::unordered_map<std::string, std::string> *cookies_=nullptr;
 		std::unordered_map<std::string, std::string> *headers_=nullptr;
 //		std::unordered_map<std::string, std::string*> *data_=nullptr;
-		std::unordered_map<std::string, std::vector<formData*>*> *data_=nullptr;
+		std::unordered_map<std::string, std::vector<std::string>*> *formData_=nullptr;
+		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=nullptr;
 //		std::vector<formData*> *data_=nullptr;
 
 		std::string getFormHeaderVal(const char* headerName, std::string *line);
 		void fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map);
 
-		const static inline std::unordered_map<std::string, RequestMethod> methodMap_=
+//		const static inline std::unordered_map<std::string, RequestMethod> methodMap_=
+		const std::unordered_map<std::string, RequestMethod> methodMap_=
 		{
 			{"GET", RequestMethod::GET},
 			{"POST", RequestMethod::POST},
@@ -72,6 +91,13 @@ class Request
 			{"DELETE", RequestMethod::DELETE},
 			{"CONNECT", RequestMethod::CONNECT},
 			{"OPTIONS", RequestMethod::OPTIONS}
+		};
+		const std::unordered_map<std::string, ContentType> contentTypeMap_=
+		{
+			{"text/plain", ContentType::TEXT_PLAIN},
+			{"application/json", ContentType::APPLICATION_JSON},
+			{"application/x-www-form-urlencoded", ContentType::APPLICATION_X_WWW_FORM_URLENCODED},
+			{"multipart/form-data", ContentType::MULTIPART_FORM_DATA}
 		};
 };
 

@@ -101,14 +101,68 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 			fillMapFromString(sCookies, ';', cookies_);
 			continue;
 		}
-
 		headers_->insert(std::pair<std::string, std::string>(name, val));
 	}
+
+	if(headers_->contains("content-type"))
+		if(contentTypeMap_.contains(headers_->at("content-type")))
+			contentType_=contentTypeMap_.at(headers_->at("content-type"));
+
 	std::cout<<"Headers:\n";
 	for(const auto &[key, val]: *headers_)
 		std::cout<<"\t\""<<key<<"\": \""<<val<<"\"\n";
 
 	return true;
+}
+
+uint16_t Request::parseBody()
+{
+	//body empty, nothing to parse; if request has to have a body, but there is no, handle on API level
+	if(body_.empty())
+		return 200;
+
+	//ignore body for non POST, PUT or DELETE requests; still can be parsed on API level if necessary
+	if(method_!=RequestMethod::POST&&method_!=RequestMethod::PUT&&method_!=RequestMethod::DELETE)
+		return 200;
+
+	//not supported content type
+	if(contentType_==ContentType::NONE&&!body_.empty())
+		return 415;
+
+	switch(contentType_)
+	{
+		case(ContentType::TEXT_PLAIN):
+		{
+			//just a text, no need to parse
+			return 200;
+		}
+		case(ContentType::APPLICATION_X_WWW_FORM_URLENCODED):
+		{
+			if(formData_==nullptr)
+				formData_=new std::unordered_map<std::string, std::vector<std::string>*>();
+			std::stringstream ss(body_);
+			std::string line;
+			while(getline(ss, line, '&'))
+			{
+				//malformed body, something like "param1&" instead of "param1=&"
+				const auto delimiter=line.find('=');
+				if(delimiter==std::string::npos)
+					return 400;
+				std::string name=line.substr(0, delimiter), val=line.substr(delimiter+1);
+				if(formData_->contains(name))
+					formData_->at(name)->push_back(val);
+				else
+				{
+					auto *vec=new std::vector<std::string>();
+					vec->push_back(val);
+					formData_->insert(std::pair<std::string, std::vector<std::string>*>(name, vec));
+				}
+			}
+			break;
+		}
+	};
+
+	return 200;
 }
 
 bool Request::parse()
@@ -245,8 +299,8 @@ bool Request::parse()
 			boundary=boundary.substr(boundary.find("=")+1);
 		}
 
-		data_=new std::unordered_map<std::string, std::vector<formData*>*>();
-		formData *data=nullptr;
+		multipartFormData_=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
+		MultipartFormData *data=nullptr;
 		bool readingHeader=false;
 		std::string key;
 		while(getline(s, line))
@@ -263,15 +317,15 @@ bool Request::parse()
 				//if current form field is not the first one write data to vector and create new data
 				if(data!=nullptr)
 				{
-					if(!data_->contains(key))
-						data_->insert({key, new std::vector<formData*>()});
-					data_->at(key)->push_back(data);
+					if(!multipartFormData_->contains(key))
+						multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
+					multipartFormData_->at(key)->push_back(data);
 				}
 				//according to form documentation request closing boundary ends with "--",
 				//so no need to continue, just break
 				if(line.find(boundary+"--")!=std::string::npos)
 					break;
-				data=new formData();
+				data=new MultipartFormData();
 				readingHeader=!readingHeader;
 				continue;
 			}
@@ -363,12 +417,12 @@ Request::~Request()
 	if(headers_!=nullptr)
 		delete headers_;
 
-	if(data_!=nullptr)
+	if(multipartFormData_!=nullptr)
 	{
-		for(auto &[key, val]:*data_)
+		for(auto &[key, val]:*multipartFormData_)
 			if(val!=nullptr)
 			{
-				for(auto &it:*data_->at(key))
+				for(auto &it:*multipartFormData_->at(key))
 					if(it!=nullptr)
 					{
 						if(it->content!=nullptr)
@@ -377,7 +431,15 @@ Request::~Request()
 					}
 				delete val;
 			}
-		delete data_;
+		delete multipartFormData_;
+	}
+
+	if(formData_!=nullptr)
+	{
+		for(auto &[key, val]: *formData_)
+			if(val!=nullptr)
+				delete val;
+		delete formData_;
 	}
 }
 
