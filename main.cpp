@@ -129,6 +129,13 @@ III If there is Content-Length read until it's value.
 					std::cout<<"\""<<e<<"\",";
 				std::cout<<std::endl;
 			}*/
+/*		if(request->multipartFormData()!=nullptr)
+			for(const auto &[key, val]: *request->multipartFormData())
+			{
+				std::cout<<"\""<<key<<"\":\n";
+				for(const auto &e: *val)
+					std::cout<<"File name: "<<e->fileName<<"; Content type: "<<e->contentType<<"; Content: \n\""<<*e->content<<"\"\n";
+			}*/
 
 
 	}

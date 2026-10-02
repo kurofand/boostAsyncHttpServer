@@ -105,8 +105,14 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	}
 
 	if(headers_->contains("content-type"))
-		if(contentTypeMap_.contains(headers_->at("content-type")))
-			contentType_=contentTypeMap_.at(headers_->at("content-type"));
+	{
+		auto contentType=headers_->at("content-type");
+		//some content-type fields(e.g. multipart form data) contains additional info, erasing it to get type
+		if(contentType.find(';')!=std::string::npos)
+			contentType.erase(contentType.find(';'));
+		if(contentTypeMap_.contains(contentType))
+			contentType_=contentTypeMap_.at(contentType);
+	}
 
 	std::cout<<"Headers:\n";
 	for(const auto &[key, val]: *headers_)
@@ -156,6 +162,73 @@ uint16_t Request::parseBody()
 					auto *vec=new std::vector<std::string>();
 					vec->push_back(val);
 					formData_->insert(std::pair<std::string, std::vector<std::string>*>(name, vec));
+				}
+			}
+			break;
+		}
+		//TODO: figure out why parser ignores last field;
+		//getline erases \n from files, figure out how to avoid it or switch from getline
+		//additional field headers can be sent in both camel case and lower case, support it(currently camel case only)
+		case(ContentType::MULTIPART_FORM_DATA):
+		{
+			auto pos=headers_->at("content-type").find("boundary=");
+			//malformed headers, no boundary field in content-type
+			if(pos==std::string::npos)
+				return 400;
+			std::string boundary=headers_->at("content-type").substr(pos+9);
+			multipartFormData_=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
+			MultipartFormData *data=nullptr;
+			std::stringstream ss(body_);
+			std::string line;
+			std::string key;
+			bool readingHeader=false;
+			while(getline(ss, line, "\r\n"))
+			{
+				if(!line.empty()&&line.back()=='\r')
+					line.pop_back();
+				if(line=="--"+boundary)
+				{
+					if(data!=nullptr)
+					{
+						if(!multipartFormData_->contains(key))
+							multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
+						multipartFormData_->at(key)->push_back(data);
+					}
+					if(line=="--"+boundary+"--")
+						break;
+					data=new MultipartFormData();
+					readingHeader=!readingHeader;
+					continue;
+				}
+				if(readingHeader)
+				{
+					pos=line.find(":");
+					//TODO: malformed form header, handle error
+					if(pos==std::string::npos||line.empty())
+					{
+						if(line.empty())
+							readingHeader=false;
+						continue;
+					}
+
+				std::cout<<"\""<<line<<"\""<<std::endl;
+					std::string h=line.substr(0, pos), v=line.substr(pos+1);
+					std::transform(h.begin(), h.end(), h.begin(),
+			                        [](unsigned char c){return std::tolower(c);});
+					if(h=="content-disposition")
+					{
+						key=getFormHeaderVal(" name", &line);
+						data->fileName=getFormHeaderVal(" fileName", &line);
+					}
+					else if(h=="content-type")
+						data->contentType=v;
+
+				}
+				else
+				{
+					if(data->content==nullptr)
+						data->content=new std::string();
+					data->content->append(line);
 				}
 			}
 			break;
