@@ -111,7 +111,6 @@ III If there is Content-Length read until it's value.
 			}
 		}
 		request->body(body);
-		std::cout<<"\""<<body<<"\""<<std::endl;
 
 		auto const currentStatus=request->parseBody();
 		if(currentStatus!=200)

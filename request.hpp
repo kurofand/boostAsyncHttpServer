@@ -42,9 +42,7 @@ class Request
 {
 	public:
 		Request(){};
-		Request(std::string_view body);
 		void body(std::string_view sv){body_=sv;}
-		bool parse();
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
 		//uint16_t to return parsing state with HTTP response codes:
 		//200 - parsing complete w/o issues;

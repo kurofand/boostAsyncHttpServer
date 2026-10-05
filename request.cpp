@@ -5,12 +5,6 @@
 
 #include <algorithm>
 #include <cstring>
-//#include <curl/curl.h>
-
-Request::Request(std::string_view body)
-{
-	body_=body;
-}
 
 bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 {
@@ -176,45 +170,37 @@ uint16_t Request::parseBody()
 			if(pos==std::string::npos)
 				return 400;
 			std::string boundary=headers_->at("content-type").substr(pos+9);
+			//malformed body
+			if(body_.find(boundary)==std::string::npos)
+				return 400;
 			multipartFormData_=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
-			MultipartFormData *data=nullptr;
-			std::stringstream ss(body_);
-			std::string line;
-			std::string key;
-			bool readingHeader=false;
-			while(getline(ss, line, "\r\n"))
+			while(body_!="--"+boundary+"--\r\n")
 			{
-				if(!line.empty()&&line.back()=='\r')
-					line.pop_back();
-				if(line=="--"+boundary)
+				//erase opening boundary, +4 is "--" at the beginning and "\r\n"
+				body_.erase(0, boundary.size()+4);
+				std::string bodyPart=body_.substr(0, body_.find("--"+boundary));
+				//there is an "empty" line between field headers and content
+				const auto headersEnd=bodyPart.find("\r\n\r\n");
+				std::string key;
+				MultipartFormData *data=new MultipartFormData();
 				{
-					if(data!=nullptr)
-					{
-						if(!multipartFormData_->contains(key))
-							multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
-						multipartFormData_->at(key)->push_back(data);
-					}
-					if(line=="--"+boundary+"--")
-						break;
-					data=new MultipartFormData();
-					readingHeader=!readingHeader;
-					continue;
-				}
-				if(readingHeader)
+				std::string headers=bodyPart.substr(0, headersEnd);
+				std::stringstream ss(headers);
+				std::string line;
+				while(getline(ss, line, '\n'))
 				{
-					pos=line.find(":");
-					//TODO: malformed form header, handle error
-					if(pos==std::string::npos||line.empty())
+					if(!line.empty()&&line.back()=='\r')
+						line.pop_back();
+					const auto delimiter=line.find(':');
+					//malformed header
+					if(delimiter==std::string::npos)
 					{
-						if(line.empty())
-							readingHeader=false;
-						continue;
+						delete data;
+						return 400;
 					}
-
-				std::cout<<"\""<<line<<"\""<<std::endl;
-					std::string h=line.substr(0, pos), v=line.substr(pos+1);
+					std::string h=line.substr(0, delimiter), v=line.substr(delimiter+1);
 					std::transform(h.begin(), h.end(), h.begin(),
-			                        [](unsigned char c){return std::tolower(c);});
+						[](unsigned char c){return std::tolower(c);});
 					if(h=="content-disposition")
 					{
 						key=getFormHeaderVal(" name", &line);
@@ -222,214 +208,23 @@ uint16_t Request::parseBody()
 					}
 					else if(h=="content-type")
 						data->contentType=v;
-
 				}
-				else
-				{
-					if(data->content==nullptr)
-						data->content=new std::string();
-					data->content->append(line);
 				}
+				if(!multipartFormData_->contains(key))
+					multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
+				//erase headers part plus \r\n\r\n
+				bodyPart.erase(0, headersEnd+4);
+				//erase \r\n from the end
+				bodyPart.erase(bodyPart.size()-2);
+				data->content=new std::string(bodyPart);
+				multipartFormData_->at(key)->push_back(data);
+				body_.erase(0, body_.find("--"+boundary));
 			}
 			break;
 		}
 	};
 
 	return 200;
-}
-
-bool Request::parse()
-{
-	std::istringstream s(std::string{body_});
-	std::string line;
-	//get first line and try to recognize request method, path, params and protocol
-	std::getline(s, line);
-	std::size_t size=0;
-	std::cout<<"Parsing request...\n"<<"\tMethod: ";
-	if(method_==RequestMethod::NONE)
-		if(line.find("GET")!=std::string::npos)
-		{
-			std::cout<<"GET\n";
-			method_=RequestMethod::GET;
-			size=3;
-		}
-		else if(line.find("POST")!=std::string::npos)
-		{
-			std::cout<<"POST\n";
-			method_=RequestMethod::POST;
-			size=4;
-		}
-		else if(line.find("HEAD")!=std::string::npos)
-		{
-			std::cout<<"HEAD\n";
-			method_=RequestMethod::HEAD;
-			size=4;
-		}
-		else if(line.find("PUT")!=std::string::npos)
-		{
-			std::cout<<"PUT\n";
-			method_=RequestMethod::PUT;
-			size=3;
-		}
-		else if(line.find("CONNECT")!=std::string::npos)
-		{
-			std::cout<<"CONNECT\n";
-			method_=RequestMethod::CONNECT;
-			size=7;
-		}
-		else if(line.find("OPTIONS")!=std::string::npos)
-		{
-			std::cout<<"OPTIONS\n";
-			method_=RequestMethod::OPTIONS;
-			size=7;
-		}
-		else
-		{
-			std::cout<<"Failed to parse method, aborting\n";
-			return false;
-		}
-	line.erase(0, size+1);
-	protocol_=line.substr(line.rfind(' ')+1);
-	std::cout<<"\tProtocol: "<<protocol_<<std::endl;;
-	if(protocol_.find("HTTP")==std::string::npos)
-		return false;
-	line.erase(line.rfind(' '));
-	if(line.find('?')!=std::string::npos)
-	{
-		std::cout<<"\tFound params, parsing...\n";
-/*		std::stringstream sParams(line.substr(line.find('?')+1));
-		params_=new std::unordered_map<std::string, std::string>();
-		while(sParams.good())
-		{
-			std::string param;
-			getline(sParams, param, '&');
-			std::size_t pos=param.find('=');
-			//if no '=' in name-val pair - skip
-			if(pos==std::string::npos)
-				continue;
-			std::string key=param.substr(0, pos);
-			std::string val=param.substr(pos+1);
-			if(params_->find(key)==params_->end())
-				params_->insert(std::pair<std::string, std::string>(key, urlDecode(std::move(val))));
-			else
-				params_->at(key)+=","+val;
-		}*/
-		if(params_==nullptr)
-			params_=new std::unordered_map<std::string, std::string>();
-		const std::string paramsLine(line.substr(line.find('?')+1));
-		fillMapFromString(paramsLine, '&', params_);
-		for(const auto& [key, val]: *params_)
-			std::cout<<"\t\t\""<<key<<"\": \""<<val<<"\"\n";
-		line.erase(line.find('?'));
-	}
-	path_=line;
-	//first line parsed, parse headers
-	std::cout<<"\tParsing headers...\n";
-	if(headers_==nullptr)
-		headers_=new std::unordered_map<std::string, std::string>();
-	while(std::getline(s, line))
-	{
-		//reached end of headers if line starts from '\r'
-		if(line.at(0)=='\r')
-			break;
-		//had an issue with some browsers that added symbols to end of the line, so decided to erase lines
-		line.erase(line.begin()+line.rfind('\r'), line.end());
-		auto delimiter=line.find(':');
-		if(delimiter==std::string::npos)
-			continue;
-		auto name=line.substr(0, delimiter);
-		std::transform(name.begin(), name.end(), name.begin(),
-			[](unsigned char c){return std::tolower(c);});
-		auto val=line.substr(delimiter+1);
-		if(val[0]==' ')
-			val=val.substr(1);
-		if(name=="cookie")
-		{
-			std::cout<<"\tFound Cookies, parsing...\n";
-			if(cookies_==nullptr)
-				cookies_=new std::unordered_map<std::string, std::string>();
-			const std::string sCookies=val;
-			fillMapFromString(sCookies, ';', cookies_);
-			std::cout<<"\tCookies:\n";
-			for(const auto& [key, val]: *cookies_)
-				std::cout<<"\t\t\""<<key<<"\": \""<<val<<"\"\n";
-			continue;
-		}
-		headers_->insert(std::pair<std::string, std::string>(name, val));
-	}
-	std::cout<<"\tHeaders:\n";
-	for(const auto& [key, val]: *headers_)
-		std::cout<<"\t\t\""<<key<<"\": \""<<val<<"\"\n";
-
-	//support form-data POST
-	if(method_==RequestMethod::POST)
-	{
-		std::cout<<"\tParsing form-data...\n";
-		std::string boundary="";
-		if(headers_->find("content-type")!=headers_->end())
-		{
-			boundary=headers_->at("content-type");
-			boundary=boundary.substr(boundary.find("=")+1);
-		}
-
-		multipartFormData_=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
-		MultipartFormData *data=nullptr;
-		bool readingHeader=false;
-		std::string key;
-		while(getline(s, line))
-		{
-			//tested with curl and had to remove \r from back. this approach faster, but not safe - if problem occures change pop_back to erase
-			if(!line.empty())
-				line.pop_back();
-//			line.erase(line.begin()+line.rfind('\r'), line.end());
-
-			//skipping boundaries
-			//next line will be a next form entity
-			if(line.find(boundary)!=std::string::npos)
-			{
-				//if current form field is not the first one write data to vector and create new data
-				if(data!=nullptr)
-				{
-					if(!multipartFormData_->contains(key))
-						multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
-					multipartFormData_->at(key)->push_back(data);
-				}
-				//according to form documentation request closing boundary ends with "--",
-				//so no need to continue, just break
-				if(line.find(boundary+"--")!=std::string::npos)
-					break;
-				data=new MultipartFormData();
-				readingHeader=!readingHeader;
-				continue;
-			}
-			//searching for form headers - Content-Disposition, name(for regular form-data), fileName and Content-Type(for attached files)
-			if(readingHeader)
-			{
-				if(line.find("Content-Disposition")!=std::string::npos||line.find("Content-Type")!=std::string::npos)
-				{
-					if(line.find("Content-Disposition")!=std::string::npos)
-					{
-//						data->fieldName=getFormHeaderVal(" name", &line);
-						key=getFormHeaderVal(" name", &line);
-						data->fileName=getFormHeaderVal(" fileName", &line);
-					}
-					else if(line.find("Content-Type")!=std::string::npos)
-						data->contentType=line.substr(line.find(" "));
-				}
-				else
-					readingHeader=false;
-			}
-			//headers readed, reading form content
-			else
-			{
-				if(data->content==nullptr)
-					data->content=new std::string();
-				data->content->append(line);
-			}
-		}
-
-	}
-	return true;
 }
 
 std::string Request::urlDecode(std::string src)
@@ -454,6 +249,12 @@ std::string Request::getFormHeaderVal(const char*  headerName, std::string *line
 {
 	std::string res;
 	auto pos=line->find(headerName);
+	if(pos==std::string::npos)
+	{
+		std::string s{headerName};
+		std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){return std::tolower(c);});
+		pos=line->find(s);
+	}
 	if(pos!=std::string::npos)
 	{
 		res=line->substr(pos);
