@@ -11,9 +11,11 @@ class Response
 		void responseCode(uint16_t code){responseCode_=code;}
 		void addHeader(std::string &&header, std::string &&val){headers_[header]=val;}
 		void setContentLength();
+		void setConnectionStatus();
 		void basicRealm(std::string &&s){basicRealm_=s;}
 		void body(std::string &&s){body_=s;}
 		void toStream(std::ostream &stream);
+		void keepAlive(bool b){keepAlive_=b;}
 		uint16_t responseCode(){return responseCode_;}
 
 		static const std::unordered_map<uint16_t, std::string> responseCodes;
@@ -24,6 +26,7 @@ class Response
 		const char* proto="HTTP/1.0";
 		std::string basicRealm_;
 		std::string body_;
+		bool keepAlive_=false;
 };
 
 #endif

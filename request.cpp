@@ -95,6 +95,8 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 			fillMapFromString(sCookies, ';', cookies_);
 			continue;
 		}
+		else if(name=="connection")
+			keepAlive_=val=="keep-alive";
 		headers_->insert(std::pair<std::string, std::string>(name, val));
 	}
 

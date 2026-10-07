@@ -27,7 +27,7 @@ boost::asio::awaitable<void> writeResponse(tcp::socket &socket, Response *respon
 	response->toStream(oStream);
 	std::cout<<"response prepared"<<std::endl;
 	co_await boost::asio::async_write(socket, sResponse, boost::asio::use_awaitable);
-	socket.close();
+//	socket.close();
 	std::cout<<"response sent, socket closed"<<std::endl;
 	delete response;
 }
@@ -78,70 +78,84 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	co_return ReadResult::OK;
 }
 
-boost::asio::awaitable<void> handleRequest(tcp::socket socket)
+boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 {
 	boost::asio::streambuf sRequest(HEADERS_SIZE_LIMIT);
-	std::cout<<" read request"<<std::endl;
-
-	auto *request=new Request();
-	const auto readResult=co_await readRequest(socket, sRequest, request);
-	Response *response;
-	switch(readResult)
+	for(;;)
 	{
-		case ReadResult::NETWORK_ERROR:
+		std::cout<<" read request"<<std::endl;
+
+		auto *request=new Request();
+		const auto readResult=co_await readRequest(socket, sRequest, request);
+		Response *response;
+		switch(readResult)
+		{
+			case ReadResult::NETWORK_ERROR:
+			{
+				delete request;
+				boost::system::error_code ec;
+				socket.shutdown(tcp::socket::shutdown_both, ec);
+				socket.close(ec);
+				co_return;
+			}
+			case ReadResult::OK:
+			case ReadResult::BAD_REQUEST:
+			case ReadResult::HEADERS_TOO_LARGE:
+			case ReadResult::PAYLOAD_TOO_LARGE:
+			{
+				response=new Response();
+				response->responseCode(static_cast<uint16_t>(readResult));
+				break;
+			}
+		};
+
+		if(readResult!=ReadResult::OK)
 		{
 			delete request;
-			boost::system::error_code ec;
-			socket.shutdown(tcp::socket::shutdown_both, ec);
-			socket.close(ec);
+			response->setConnectionStatus();
+			co_await writeResponse(socket, response);
 			co_return;
 		}
-		case ReadResult::OK:
-		case ReadResult::BAD_REQUEST:
-		case ReadResult::HEADERS_TOO_LARGE:
-		case ReadResult::PAYLOAD_TOO_LARGE:
+
+		const auto currentStatus=request->parseBody();
+		if(currentStatus!=200)
 		{
-			response=new Response();
-			response->responseCode(static_cast<uint16_t>(readResult));
-			break;
+			delete request;
+			response->setConnectionStatus();
+			co_await writeResponse(socket, response);
+			co_return;
 		}
-	};
 
-	if(readResult!=ReadResult::OK)
-	{
+		const bool keepAlive=request->keepAlive();
+		response->keepAlive(keepAlive);
+		response->setConnectionStatus();
+
+/*		if(request->formData()!=nullptr)
+			for(const auto &[key, val]: *request->formData())
+			{
+				std::cout<<"\""<<key<<"\": ";
+				for(const auto &e: *val)
+					std::cout<<"\""<<e<<"\",";
+				std::cout<<std::endl;
+			}*/
+/*		if(request->multipartFormData()!=nullptr)
+			for(const auto &[key, val]: *request->multipartFormData())
+			{
+				std::cout<<"\""<<key<<"\":\n";
+				for(const auto &e: *val)
+					std::cout<<"File name: "<<e->fileName<<"; Content type: "<<e->contentType<<"; Content: \n\""<<*e->content<<"\"\n";
+			}*/
+
+
+		std::cout<<"Parsing complete"<<std::endl;
 		delete request;
 		co_await writeResponse(socket, response);
-		co_return;
-	}
-
-	const auto currentStatus=request->parseBody();
-	if(currentStatus!=200)
-	{
-		delete request;
-		co_await writeResponse(socket, response);
-		co_return;
-	}
-
-/*	if(request->formData()!=nullptr)
-		for(const auto &[key, val]: *request->formData())
+		if(!keepAlive)
 		{
-			std::cout<<"\""<<key<<"\": ";
-			for(const auto &e: *val)
-				std::cout<<"\""<<e<<"\",";
-			std::cout<<std::endl;
-		}*/
-/*	if(request->multipartFormData()!=nullptr)
-		for(const auto &[key, val]: *request->multipartFormData())
-		{
-			std::cout<<"\""<<key<<"\":\n";
-			for(const auto &e: *val)
-				std::cout<<"File name: "<<e->fileName<<"; Content type: "<<e->contentType<<"; Content: \n\""<<*e->content<<"\"\n";
-		}*/
-
-
-	std::cout<<"Parsing complete"<<std::endl;
-	delete request;
-	co_await writeResponse(socket, response);
+			socket.close();
+			co_return;
+		}
+	}
 }
 
 boost::asio::awaitable<void> startListen()
@@ -153,7 +167,7 @@ boost::asio::awaitable<void> startListen()
 		std::cout<<"wait for connection"<<std::endl;
 		tcp::socket socket=co_await acceptor.async_accept(boost::asio::use_awaitable);
 		std::cout<<"incoming connection"<<std::endl;
-		boost::asio::co_spawn(executor, handleRequest(std::move(socket)), boost::asio::detached);
+		boost::asio::co_spawn(executor, handleConnection(std::move(socket)), boost::asio::detached);
 	}
 }
 

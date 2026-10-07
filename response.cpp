@@ -32,6 +32,11 @@ void Response::toStream(std::ostream &stream)
 	stream<<body_;
 }
 
+void Response::setConnectionStatus()
+{
+	headers_["connection"]=keepAlive_?"keep-alive":"close";
+}
+
 void Response::setContentLength()
 {
 //	if(!body_.empty())
