@@ -12,7 +12,7 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	getline(is, line);
 	std::cout<<"Bytes to read: "<<bytesToRead<<std::endl;
 	auto readBytes=line.size()+1;
-	if(line.back()=='\r')
+	if(!line.empty()&&line.back()=='\r')
 		line.pop_back();
 
 	{
@@ -75,7 +75,7 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	{
 		getline(is, line);
 		readBytes+=line.size()+1;
-		if(line.back()=='\r')
+		if(!line.empty()&&line.back()=='\r')
 			line.pop_back();
 		auto delimiter=line.find(':');
 		if(delimiter==std::string::npos)

@@ -1,5 +1,4 @@
 #include <boost/asio.hpp>
-//#include <boost/regex.hpp>
 #include <string>
 #include <string_view>
 #include <iostream>
@@ -15,6 +14,9 @@
 #ifndef CONTENT_LENGTH_LIMIT
 #define CONTENT_LENGTH_LIMIT 1024*1024
 #endif
+#ifndef KEEP_ALIVE_TIMEOUT
+#define KEEP_ALIVE_TIMEOUT 10
+#endif
 
 using boost::asio::ip::tcp;
 
@@ -27,8 +29,7 @@ boost::asio::awaitable<void> writeResponse(tcp::socket &socket, Response *respon
 	response->toStream(oStream);
 	std::cout<<"response prepared"<<std::endl;
 	co_await boost::asio::async_write(socket, sResponse, boost::asio::use_awaitable);
-//	socket.close();
-	std::cout<<"response sent, socket closed"<<std::endl;
+	std::cout<<"response sent"<<std::endl;
 	delete response;
 }
 
@@ -80,13 +81,41 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 
 boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 {
+	boost::asio::steady_timer timer(socket.get_executor());
+
 	boost::asio::streambuf sRequest(HEADERS_SIZE_LIMIT);
+	bool waitNextRequest=false;
+
 	for(;;)
 	{
-		std::cout<<" read request"<<std::endl;
+		bool timedout=false;
+		if(waitNextRequest)
+		{
+			timer.expires_after(std::chrono::seconds(KEEP_ALIVE_TIMEOUT));
+			timer.async_wait([&socket, &timedout](const boost::system::error_code &ec)
+				{
+					if(ec==boost::asio::error::operation_aborted)
+						return;
+					if(ec)
+						return;
+					std::cout<<"connection timeout\n";
+					timedout=true;
+					socket.close();
+				});
+		}
+		std::cout<<"read request"<<std::endl;
 
 		auto *request=new Request();
 		const auto readResult=co_await readRequest(socket, sRequest, request);
+
+		timer.cancel();
+
+		if(timedout)
+		{
+			delete request;
+			co_return;
+		}
+
 		Response *response;
 		switch(readResult)
 		{
@@ -155,6 +184,7 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			socket.close();
 			co_return;
 		}
+		waitNextRequest=true;
 	}
 }
 
