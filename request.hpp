@@ -49,6 +49,7 @@ class Request
 //		std::vector<formData*>* data(){return data_;}
 		std::unordered_map<std::string, std::vector<std::string>*>* formData(){return formData_;}
 		std::unordered_map<std::string, std::vector<MultipartFormData*>*>* multipartFormData(){return multipartFormData_;}
+		ProtocolVersion protocolVersion(){return protocolVersion_;}
 		bool keepAlive(){return keepAlive_;}
 		~Request();
 
@@ -66,6 +67,7 @@ class Request
 		std::unordered_map<std::string, std::vector<std::string>*> *formData_=nullptr;
 		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=nullptr;
 		bool keepAlive_=false;
+		ProtocolVersion protocolVersion_;
 //		std::vector<formData*> *data_=nullptr;
 
 		std::string getFormHeaderVal(const char* headerName, std::string *line);

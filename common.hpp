@@ -24,4 +24,9 @@ enum class RequestMethod
 	OPTIONS
 };
 
+struct ProtocolVersion
+{
+	uint8_t maj, min;
+};
+
 #endif

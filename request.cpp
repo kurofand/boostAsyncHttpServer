@@ -36,12 +36,25 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 
 	sp=line.rfind(' ');
 	std::string proto=line.substr(sp+1);
-	if(!proto.starts_with("HTTP"))
+	//usual protocol str HTTP/1.0
+	if(!proto.starts_with("HTTP/"))
 	{
 		std::cout<<"Unknown protocol: \""<<proto<<"\", aborting\n";
 		return false;
 	}
 	protocol_=proto;
+
+	{
+	const size_t pos=proto.rfind('/')+1;
+	if(pos>proto.size())
+		return false;
+	const auto version=proto.substr(pos);
+	//according to HTTP specification 1.x versions have to be 3 symbols long
+	if(version.size()!=3&&version[0]!='1'&&(version[2]!=0||version[2]!=1))
+		return false;
+	protocolVersion_.maj=version[0]-'0';
+	protocolVersion_.min=version[2]-'0';
+	}
 
 	std::cout<<"Proto: \""<<protocol_<<"\"\n";
 	line.erase(sp);
@@ -84,7 +97,7 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		std::transform(name.begin(), name.end(), name.begin(),
 			[](unsigned char c){return std::tolower(c);});
 		auto val=line.substr(delimiter+1);
-		if(val[0]==' ')
+		if(!val.empty()&&val[0]==' ')
 			val=val.substr(1);
 
 		if(name=="cookie")
