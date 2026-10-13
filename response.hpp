@@ -5,9 +5,12 @@
 #include <cstdint>
 #include <string>
 
+#include "common.hpp"
+
 class Response
 {
 	public:
+		void requestMethod(RequestMethod m){requestMethod_=m;}
 		void responseCode(uint16_t code){responseCode_=code;}
 		void addHeader(std::string &&header, std::string &&val){headers_[header]=val;}
 		void setContentLength();
@@ -21,6 +24,8 @@ class Response
 		static const std::unordered_map<uint16_t, std::string> responseCodes;
 
 	private:
+		bool shouldHaveBody();
+		RequestMethod requestMethod_;
 		uint16_t responseCode_=200;
 		std::unordered_map<std::string, std::string> headers_;
 		const char* proto="HTTP/1.0";

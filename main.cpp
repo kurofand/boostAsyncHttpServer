@@ -20,7 +20,7 @@
 
 using boost::asio::ip::tcp;
 
-boost::asio::awaitable<void> writeResponse(tcp::socket &socket, Response *response)
+boost::asio::awaitable<bool> writeResponse(tcp::socket &socket, Response *response)
 {
 	std::cout<<"prepare response"<<std::endl;
 	boost::asio::streambuf sResponse;
@@ -28,9 +28,17 @@ boost::asio::awaitable<void> writeResponse(tcp::socket &socket, Response *respon
 	response->setContentLength();
 	response->toStream(oStream);
 	std::cout<<"response prepared"<<std::endl;
-	co_await boost::asio::async_write(socket, sResponse, boost::asio::use_awaitable);
+	bool res=true;
+	boost::system::error_code ec;
+	co_await boost::asio::async_write(socket, sResponse, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+	if(ec)
+	{
+		std::cout<<"Error on sent response: "<<ec.message()<<std::endl;
+		res=false;
+	}
 	std::cout<<"response sent"<<std::endl;
 	delete response;
+	co_return res;
 }
 
 boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio::streambuf &buffer, Request *request)
@@ -54,7 +62,10 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 		const auto tmp=request->headers()->at("content-length");
 		try
 		{
-			contentLength=std::stoi(tmp);
+			size_t converted=0;
+			contentLength=std::stoi(tmp, &converted);
+			if(converted!=tmp.size())
+				co_return ReadResult::BAD_REQUEST;
 		}
 		catch(const std::exception &e)
 		{
@@ -133,6 +144,7 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			case ReadResult::PAYLOAD_TOO_LARGE:
 			{
 				response=new Response();
+				response->requestMethod(request->method());
 				response->responseCode(static_cast<uint16_t>(readResult));
 				break;
 			}
@@ -178,8 +190,8 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 
 		std::cout<<"Parsing complete"<<std::endl;
 		delete request;
-		co_await writeResponse(socket, response);
-		if(!keepAlive)
+		const bool writeSuccess=co_await writeResponse(socket, response);
+		if(!keepAlive||!writeSuccess)
 		{
 			socket.close();
 			co_return;

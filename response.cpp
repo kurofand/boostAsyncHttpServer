@@ -5,6 +5,11 @@
 const std::unordered_map<uint16_t, std::string> Response::responseCodes=
 {
 	{200, "OK"},
+	{204, "No content"},
+	{205, "Reset content"},
+
+	{304, "Not modified"},
+
 	{400, "Bad Request"},
 	{401, "Unauthorized"},
 	{403, "Forbidden"},
@@ -12,6 +17,7 @@ const std::unordered_map<uint16_t, std::string> Response::responseCodes=
 	{413, "Payload Too Large"},
 	{415, "Unsupported Media Type"},
 	{431, "Request Header Fields Too Large"},
+
 	{500, "Internal Server Error"}
 };
 
@@ -20,7 +26,10 @@ void Response::toStream(std::ostream &stream)
 //goal is fill stream for writing to socket with protocol
 	stream<<proto<<" ";
 //response code
-	stream<<responseCode_<<" "<<responseCodes.at(responseCode_)<<"\r\n";
+	stream<<responseCode_<<" ";
+	if(responseCodes.contains(responseCode_))
+		stream<<responseCodes.at(responseCode_);
+	stream<<"\r\n";
 
 //response headers
 	for(auto &[key, val]:headers_)
@@ -29,7 +38,8 @@ void Response::toStream(std::ostream &stream)
 
 //and response body
 //	stream<<body_<<"\r\n";
-	stream<<body_;
+	if(shouldHaveBody())
+		stream<<body_;
 }
 
 void Response::setConnectionStatus()
@@ -39,8 +49,18 @@ void Response::setConnectionStatus()
 
 void Response::setContentLength()
 {
-//	if(!body_.empty())
 //server should always send content-length header
 //important note: if response closed with "\r\n" length should be body_.size()+2
+//content-length header forbidden by HTTP specification for 204 response
+	if(responseCode_!=204)
 		headers_["content-length"]=std::to_string(body_.size());
+}
+
+bool Response::shouldHaveBody()
+{
+	return
+		requestMethod_!=RequestMethod::HEAD&&
+		responseCode_!=204&&
+		responseCode_!=205&&
+		responseCode_!=304;
 }

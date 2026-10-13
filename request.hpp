@@ -7,17 +7,7 @@
 #include <vector>
 #include <cstdint>
 
-enum class RequestMethod
-{
-	NONE=0,
-	GET,
-	POST,
-	HEAD,
-	PUT,
-	DELETE,
-	CONNECT,
-	OPTIONS
-};
+#include "common.hpp"
 
 enum class ContentType
 {

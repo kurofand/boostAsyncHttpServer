@@ -1,3 +1,6 @@
+#ifndef COMMON_HPP
+#define COMMON_HPP
+
 enum class ReadResult: uint16_t
 {
 	OK=200,
@@ -8,3 +11,17 @@ enum class ReadResult: uint16_t
 	TIMEOUT,
 	NETWORK_ERROR
 };
+
+enum class RequestMethod
+{
+	NONE=0,
+	GET,
+	POST,
+	HEAD,
+	PUT,
+	DELETE,
+	CONNECT,
+	OPTIONS
+};
+
+#endif
