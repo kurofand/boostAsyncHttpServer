@@ -44,20 +44,25 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	}
 	protocol_=proto;
 
-	{
-	const size_t pos=proto.rfind('/')+1;
-	if(pos>proto.size())
+/*	{
+	const size_t pos=proto.rfind('/');
+	if(pos==std::string::npos||pos+1>proto.size())
 		return false;
-	const auto version=proto.substr(pos);
+	const auto version=proto.substr(++pos);
 	//according to HTTP specification 1.x versions have to be 3 symbols long
-	if(version.size()!=3&&version[0]!='1'&&(version[2]!=0||version[2]!=1))
+	if(version.size()!=3&&version[0]!='1'&&(version[2]!='0'||version[2]!='1'))
 		return false;
 	protocolVersion_.maj=version[0]-'0';
 	protocolVersion_.min=version[2]-'0';
-	}
+	}*/
 
 	std::cout<<"Proto: \""<<protocol_<<"\"\n";
 	line.erase(sp);
+	}
+	if(!parseProtoVersion())
+	{
+		std::cout<<"Failed to parse protocol version"<<std::endl;
+		return false;
 	}
 
 	{
@@ -109,8 +114,19 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 			continue;
 		}
 		else if(name=="connection")
-			keepAlive_=val=="keep-alive";
-		headers_->insert(std::pair<std::string, std::string>(name, val));
+		{
+			std::transform(val.begin(), val.end(), val.begin(),
+				[](unsigned char c){return std::tolower(c);});
+			keepAlive_=parseConnectionHeader(val);
+		}
+
+		if(headers_->contains(name))
+		{
+			if(!manageHeaderDuplicate(name, val))
+				return false;
+		}
+		else
+			headers_->insert(std::pair<std::string, std::string>(name, val));
 	}
 
 	if(headers_->contains("content-type"))
@@ -297,6 +313,66 @@ void Request::fillMapFromString(const std::string &str, const char delimiter, st
 		else
 			map->at(key)+=","+urlDecode(std::move(val));
 	}
+}
+
+bool Request::parseProtoVersion()
+{
+	if(protocol_.empty())
+		return false;
+	if(protocol_=="HTTP/1.0")
+	{
+		protocolVersion_={1,0};
+		return true;
+	}
+	else if(protocol_=="HTTP/1.1")
+	{
+		protocolVersion_={1,1};
+		return true;
+	}
+	return false;
+}
+
+//method for manage duplicates
+//default policy is override
+//some header duplicates are protocol violation, in this cases return false
+bool Request::manageHeaderDuplicate(std::string &key, std::string &val)
+{
+	//content-length can have a duplicate and request is correct if values are equal
+	if(key=="content-length")
+	{
+		if(headers_->at(key)==val)
+			return true;
+		return false;
+	}
+	headers_->at(key)=val;
+	return true;
+}
+
+//there also can be parsing for additional tokens
+bool Request::parseConnectionHeader(std::string &val)
+{
+	//multiple tokens
+	if(val.find(',')!=std::string::npos)
+	{
+		std::vector<std::string> tokens;
+		std::stringstream ss{val};
+		std::string line;
+		while(getline(ss, line, ','))
+			if(!line.empty())
+			{
+				if(line.front()==' ')
+					line.erase(0, 1);
+				tokens.push_back(line);
+			}
+		for(const auto &s: tokens)
+			if(s=="close")
+				return false;
+	}
+	else
+		if(val=="close")
+			return false;
+	//keep-alive is default for HTTP/1.1
+	return protocolVersion_.min==1;
 }
 
 Request::~Request()

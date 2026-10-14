@@ -72,6 +72,9 @@ class Request
 
 		std::string getFormHeaderVal(const char* headerName, std::string *line);
 		void fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map);
+		bool manageHeaderDuplicate(std::string &key, std::string &val);
+		bool parseProtoVersion();
+		bool parseConnectionHeader(std::string &val);
 
 //		const static inline std::unordered_map<std::string, RequestMethod> methodMap_=
 		const std::unordered_map<std::string, RequestMethod> methodMap_=
