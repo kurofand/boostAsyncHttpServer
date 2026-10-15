@@ -113,12 +113,6 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 			fillMapFromString(sCookies, ';', cookies_);
 			continue;
 		}
-		else if(name=="connection")
-		{
-			std::transform(val.begin(), val.end(), val.begin(),
-				[](unsigned char c){return std::tolower(c);});
-			keepAlive_=parseConnectionHeader(val);
-		}
 
 		if(headers_->contains(name))
 		{
@@ -138,6 +132,8 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		if(contentTypeMap_.contains(contentType))
 			contentType_=contentTypeMap_.at(contentType);
 	}
+
+	keepAlive_=parseConnectionHeader();
 
 	std::cout<<"Headers:\n";
 	for(const auto &[key, val]: *headers_)
@@ -344,15 +340,27 @@ bool Request::manageHeaderDuplicate(std::string &key, std::string &val)
 			return true;
 		return false;
 	}
+	else if(key=="connection")
+	{
+		headers_->at(key)+=", "+val;
+		return true;
+	}
 	headers_->at(key)=val;
 	return true;
 }
 
 //there also can be parsing for additional tokens
-bool Request::parseConnectionHeader(std::string &val)
+bool Request::parseConnectionHeader()
 {
+	std::string val{""};
+	if(headers_->contains("connection"))
+	{
+		val=headers_->at("connection");
+		std::transform(val.begin(), val.end(), val.begin(),
+			[](unsigned char c){return std::tolower(c);});
+	}
 	//multiple tokens
-	if(val.find(',')!=std::string::npos)
+	if(!val.empty()&&val.find(',')!=std::string::npos)
 	{
 		std::vector<std::string> tokens;
 		std::stringstream ss{val};
