@@ -74,6 +74,9 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	}
 	if(contentLength>CONTENT_LENGTH_LIMIT)
 		co_return ReadResult::PAYLOAD_TOO_LARGE;
+	else if(contentLength<0)
+		co_return ReadResult::BAD_REQUEST;
+
 	auto available=buffer.size();
 	std::string body(contentLength, '\0');
 	if(available>=contentLength)

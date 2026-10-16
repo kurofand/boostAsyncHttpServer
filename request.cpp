@@ -208,6 +208,8 @@ uint16_t Request::parseBody()
 				std::string bodyPart=body_.substr(0, body_.find("--"+boundary));
 				//there is an "empty" line between field headers and content
 				const auto headersEnd=bodyPart.find("\r\n\r\n");
+				if(headersEnd==std::string::npos)
+					return 400;
 				std::string key;
 				MultipartFormData *data=new MultipartFormData();
 				{
@@ -242,7 +244,8 @@ uint16_t Request::parseBody()
 				//erase headers part plus \r\n\r\n
 				bodyPart.erase(0, headersEnd+4);
 				//erase \r\n from the end
-				bodyPart.erase(bodyPart.size()-2);
+				if(bodyPart.ends_with("\r\n"))
+					bodyPart.erase(bodyPart.size()-2);
 				data->content=new std::string(bodyPart);
 				multipartFormData_->at(key)->push_back(data);
 				body_.erase(0, body_.find("--"+boundary));
@@ -389,6 +392,8 @@ Request::~Request()
 		delete params_;
 	if(headers_!=nullptr)
 		delete headers_;
+	if(cookies_!=nullptr)
+		delete cookies_;
 
 	if(multipartFormData_!=nullptr)
 	{
