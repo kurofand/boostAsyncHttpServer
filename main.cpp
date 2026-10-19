@@ -7,16 +7,7 @@
 #include "response.hpp"
 
 #include "common.hpp"
-
-#ifndef HEADERS_SIZE_LIMIT
-#define HEADERS_SIZE_LIMIT 1024*16
-#endif
-#ifndef CONTENT_LENGTH_LIMIT
-#define CONTENT_LENGTH_LIMIT 1024*1024
-#endif
-#ifndef KEEP_ALIVE_TIMEOUT
-#define KEEP_ALIVE_TIMEOUT 10
-#endif
+#include "config.hpp"
 
 using boost::asio::ip::tcp;
 
@@ -43,12 +34,30 @@ boost::asio::awaitable<bool> writeResponse(tcp::socket &socket, Response *respon
 
 boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio::streambuf &buffer, Request *request)
 {
+	bool timedout=false;
+	bool headersRead=false;
+	boost::asio::steady_timer timer(socket.get_executor());
+	timer.expires_after(std::chrono::seconds(HEADERS_TIMEOUT));
+	timer.async_wait([&socket, &timedout, &headersRead](const boost::system::error_code &ec)
+		{
+			if(ec||headersRead)
+				return;
+
+			timedout=true;
+			socket.cancel();
+		});
+
 	boost::system::error_code ec;
 	const auto headerLength=co_await boost::asio::async_read_until(socket, buffer, "\r\n\r\n", boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+	headersRead=true;
+	timer.cancel();
+
 	if(ec)
 	{
 		if(ec==boost::asio::error::not_found&&buffer.size()==HEADERS_SIZE_LIMIT)
 			co_return ReadResult::HEADERS_TOO_LARGE;
+		else if(ec==boost::asio::error::operation_aborted&&timedout)
+			co_return ReadResult::TIMEOUT;
 		else
 			co_return ReadResult::NETWORK_ERROR;
 	}
@@ -56,6 +65,12 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	std::istream is{&buffer};
 	if(!request->parseHeaders(is, headerLength))
 		co_return ReadResult::BAD_REQUEST;
+
+	//block for not implemented encoding types, etc
+	if(request->headers()!=nullptr&&
+		(request->headers()->contains("transfer-encoding")))
+		co_return ReadResult::NOT_IMPLEMENTED;
+
 	unsigned int contentLength=0;
 	if(request->headers()!=nullptr&&request->headers()->contains("content-length"))
 	{
@@ -74,8 +89,6 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	}
 	if(contentLength>CONTENT_LENGTH_LIMIT)
 		co_return ReadResult::PAYLOAD_TOO_LARGE;
-	else if(contentLength<0)
-		co_return ReadResult::BAD_REQUEST;
 
 	auto available=buffer.size();
 	std::string body(contentLength, '\0');
@@ -145,6 +158,8 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			case ReadResult::BAD_REQUEST:
 			case ReadResult::HEADERS_TOO_LARGE:
 			case ReadResult::PAYLOAD_TOO_LARGE:
+			case ReadResult::NOT_IMPLEMENTED:
+			case ReadResult::TIMEOUT:
 			{
 				response=new Response();
 				response->requestMethod(request->method());

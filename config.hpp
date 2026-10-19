@@ -1,0 +1,21 @@
+#pragma once
+
+#ifndef HEADERS_SIZE_LIMIT
+#define HEADERS_SIZE_LIMIT 1024*16
+#endif
+
+#ifndef CONTENT_LENGTH_LIMIT
+#define CONTENT_LENGTH_LIMIT 1024*1024
+#endif
+
+#ifndef KEEP_ALIVE_TIMEOUT
+#define KEEP_ALIVE_TIMEOUT 10
+#endif
+
+#ifndef HEADERS_TIMEOUT
+#define HEADERS_TIMEOUT 3
+#endif
+
+#ifndef BODY_IDLE_TIMEOUT
+#define BODY_IDLE_TIMEOUT 3
+#endif

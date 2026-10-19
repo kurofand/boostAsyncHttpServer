@@ -123,6 +123,9 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 			headers_->insert(std::pair<std::string, std::string>(name, val));
 	}
 
+	if(headers_->contains("content-length")&&headers_->contains("transfer-encoding"))
+		return false;
+
 	if(headers_->contains("content-type"))
 	{
 		auto contentType=headers_->at("content-type");

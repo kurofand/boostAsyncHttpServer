@@ -14,6 +14,7 @@ const std::unordered_map<uint16_t, std::string> Response::responseCodes=
 	{401, "Unauthorized"},
 	{403, "Forbidden"},
 	{404, "Not Found"},
+	{408, "Request Timeout"},
 	{413, "Payload Too Large"},
 	{415, "Unsupported Media Type"},
 	{431, "Request Header Fields Too Large"},
