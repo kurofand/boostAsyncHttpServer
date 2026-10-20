@@ -97,10 +97,32 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	else
 	{
 		is.read(&body[0], available);
-		const size_t remaining=contentLength-available;
-		co_await boost::asio::async_read(socket, boost::asio::buffer(body.data()+available, remaining), boost::asio::transfer_exactly(remaining), boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-		if(ec)
-			co_return ReadResult::NETWORK_ERROR;
+		size_t remaining=contentLength-available;
+		while(remaining>0)
+		{
+			timedout=false;
+			bool chunkRead=false;
+			timer.expires_after(std::chrono::seconds(BODY_IDLE_TIMEOUT));
+			timer.async_wait([&socket, &timedout, &chunkRead](const boost::system::error_code &ec)
+				{
+					if(ec||chunkRead)
+						return;
+					timedout=true;
+					socket.cancel();
+				});
+			const auto bytes=co_await socket.async_read_some(boost::asio::buffer(body.data()+available, remaining), boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+			chunkRead=true;
+			timer.cancel();
+			if(ec)
+			{
+				if(ec==boost::asio::error::operation_aborted&&timedout)
+					co_return ReadResult::TIMEOUT;
+				else
+					co_return ReadResult::NETWORK_ERROR;
+			}
+			available+=bytes;
+			remaining-=bytes;
+		}
 	}
 	request->body(body);
 	co_return ReadResult::OK;
