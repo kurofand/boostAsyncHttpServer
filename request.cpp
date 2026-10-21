@@ -179,6 +179,14 @@ uint16_t Request::parseBody()
 				if(delimiter==std::string::npos)
 					return 400;
 				std::string name=line.substr(0, delimiter), val=line.substr(delimiter+1);
+
+				while(name.find('+')!=std::string::npos)
+					name[name.find('+')]=' ';
+				while(val.find('+')!=std::string::npos)
+					val[val.find('+')]=' ';
+				name=urlDecode(std::move(name));
+				val=urlDecode(std::move(val));
+
 				if(formData_->contains(name))
 					formData_->at(name)->push_back(val);
 				else
