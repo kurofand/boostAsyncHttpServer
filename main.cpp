@@ -203,6 +203,7 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 		{
 			delete request;
 			response->setConnectionStatus();
+			response->responseCode(currentStatus);
 			co_await writeResponse(socket, response);
 			co_return;
 		}

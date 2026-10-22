@@ -203,13 +203,70 @@ uint16_t Request::parseBody()
 		//additional field headers can be sent in both camel case and lower case, support it(currently camel case only)
 		case(ContentType::MULTIPART_FORM_DATA):
 		{
-			auto pos=headers_->at("content-type").find("boundary=");
+			auto pos=headers_->at("content-type").find(';');
 			//malformed headers, no boundary field in content-type
 			if(pos==std::string::npos)
 				return 400;
-			std::string boundary=headers_->at("content-type").substr(pos+9);
+			if(headers_->at("content-type").at(pos+1)==' ')
+				pos++;
+
+			std::string boundary;
+			{
+
+			std::string s=headers_->at("content-type").substr(pos+1);
+			std::string_view tmp(s.c_str(), s.size());
+
+			while(!tmp.empty())
+			{
+				pos=tmp.find('=');
+				if(pos==std::string_view::npos)
+					return 400;
+				std::string key{tmp.substr(0, pos)};
+				std::transform(key.begin(), key.end(), key.begin(),
+					[](unsigned char c){return std::tolower(c);});
+				if(tmp.at(pos+1)==' ')
+					pos++;
+				tmp.remove_prefix(++pos);
+				pos=0;
+				bool quoted=false;
+				while(pos<tmp.size())
+				{
+					if(tmp.at(pos)==';'&&!quoted)
+						break;
+					if(tmp.at(pos)=='"')
+						if((pos>0&&tmp.at(pos-1)!='\\')||pos==0)
+							quoted=!quoted;
+					pos++;
+				}
+				auto val=tmp.substr(0, pos);
+				if(val.front()=='"')
+				{
+					//something went wrong - if params val starts with " it should ends with "
+					if(val.back()!='"')
+						return 400;
+					//remove open and close "
+					val.remove_prefix(1);
+					val.remove_suffix(1);
+				}
+				if(key=="boundary")
+				{
+					boundary=val;
+					//boundary length limitation by standard
+					if(boundary.size()>70)
+						return 400;
+					break;
+				}
+				tmp.remove_prefix(val.size());
+				while(!tmp.empty()&&(tmp.front()==';'||tmp.front()==' '))
+					tmp.remove_prefix(1);
+			}
+
+			}
+
+			std::cout<<"boundary: \""<<boundary<<"\"\n";
+
 			//malformed body
-			if(body_.find(boundary)==std::string::npos)
+			if(body_.find("--"+boundary+"--")==std::string::npos)
 				return 400;
 			multipartFormData_=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
 			while(body_!="--"+boundary+"--\r\n")
