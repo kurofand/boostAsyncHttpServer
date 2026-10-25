@@ -255,6 +255,9 @@ uint16_t Request::parseBody()
 			}
 
 			std::string_view body(body_.c_str(), body_.size());
+			//malformed data - body size smaller than closing boundary sequence
+			if(body.size()<boundary.size()+8)
+				return 400;
 			//check opening and closing boundary
 			if(body.substr(0, 4+boundary.size())!="--"+boundary+"\r\n"||
 				body.substr(body.size()-boundary.size()-8)!="\r\n--"+boundary+"--\r\n")
@@ -267,7 +270,7 @@ uint16_t Request::parseBody()
 					body.remove_prefix(2);
 				//erase opening boundary, +4 is "--" at the beginning and "\r\n"
 				body.remove_prefix(boundary.size()+4);
-				std::string_view bodyPart=body.substr(0, body.find("--"+boundary));
+				std::string_view bodyPart=body.substr(0, body.find("\r\n--"+boundary));
 				//there is an "empty" line between field headers and content
 				const auto headersEnd=bodyPart.find("\r\n\r\n");
 				if(headersEnd==std::string::npos)
@@ -303,7 +306,7 @@ uint16_t Request::parseBody()
 						val.remove_prefix(1);
 					if(h=="content-disposition")
 					{
-						if(!parseContentDisposition(val, key, data->fileName))
+						if(!parseContentDisposition(val, key, data->fileName)||key.empty())
 						{
 							delete data;
 							return 400;
