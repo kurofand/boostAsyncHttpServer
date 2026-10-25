@@ -198,9 +198,6 @@ uint16_t Request::parseBody()
 			}
 			break;
 		}
-		//TODO: figure out why parser ignores last field;
-		//getline erases \n from files, figure out how to avoid it or switch from getline
-		//additional field headers can be sent in both camel case and lower case, support it(currently camel case only)
 		case(ContentType::MULTIPART_FORM_DATA):
 		{
 			auto pos=headers_->at("content-type").find(';');
@@ -231,17 +228,7 @@ uint16_t Request::parseBody()
 				while(tmp.at(pos+1)==' ')
 					pos++;
 				tmp.remove_prefix(++pos);
-				pos=0;
-				bool quoted=false;
-				while(pos<tmp.size())
-				{
-					if(tmp.at(pos)==';'&&!quoted)
-						break;
-					if(tmp.at(pos)=='"')
-						if((pos>0&&tmp.at(pos-1)!='\\')||pos==0)
-							quoted=!quoted;
-					pos++;
-				}
+				pos=findSemicolon(tmp);
 				auto val=tmp.substr(0, pos);
 				tmp.remove_prefix(val.size());
 				if(val.front()=='"')
@@ -267,13 +254,17 @@ uint16_t Request::parseBody()
 
 			}
 
-			//malformed body
-			if(body_.find("\r\n--"+boundary+"--\r\n")==std::string::npos)
+			std::string_view body(body_.c_str(), body_.size());
+			//check opening and closing boundary
+			if(body.substr(0, 4+boundary.size())!="--"+boundary+"\r\n"||
+				body.substr(body.size()-boundary.size()-8)!="\r\n--"+boundary+"--\r\n")
 				return 400;
 			multipartFormData_=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
-			std::string_view body(body_.c_str(), body_.size());
-			while(body!="--"+boundary+"--\r\n")
+			while(body!="\r\n--"+boundary+"--\r\n")
 			{
+				//remove opening \r\n if any, it should be there in second and next form parts
+				if(body.starts_with("\r\n"))
+					body.remove_prefix(2);
 				//erase opening boundary, +4 is "--" at the beginning and "\r\n"
 				body.remove_prefix(boundary.size()+4);
 				std::string_view bodyPart=body.substr(0, body.find("--"+boundary));
@@ -302,65 +293,20 @@ uint16_t Request::parseBody()
 					std::transform(h.begin(), h.end(), h.begin(),
 						[](unsigned char c){return std::tolower(c);});
 					std::string_view val(line.data()+delimiter+1, line.size()-delimiter-1);
-					while(val.front()==' ')
+					//header with empty value, considering this case as malformed data
+					if(val.empty())
+					{
+						delete data;
+						return 400;
+					}
+					while(!val.empty()&&val.front()==' ')
 						val.remove_prefix(1);
 					if(h=="content-disposition")
 					{
-						auto pos=val.find(';');
-						//there must be header val and at least name param
-						if(pos==std::string_view::npos)
+						if(!parseContentDisposition(val, key, data->fileName))
 						{
 							delete data;
 							return 400;
-						}
-
-						std::string cd{val.substr(0, pos)};
-						std::transform(cd.begin(), cd.end(), cd.begin(),
-							[](unsigned char c){return std::tolower(c);});
-						if(cd!="form-data")
-						{
-							delete data;
-							return 400;
-						}
-						val.remove_prefix(pos+1);
-
-						//remove spaces in front if any, split to key and val by = and remove spaces from key back if any
-						//lowercase key, erase it from line, clear spaces from val front if any, read val till ; or end
-						while(!val.empty())
-						{
-							while(val.front()==' ')
-								val.remove_prefix(1);
-							pos=val.find('=');
-							if(pos==std::string_view::npos)
-							{
-								delete data;
-								return 400;
-							}
-							std::string paramName{val.substr(0, pos)};
-							while(paramName.back()==' ')
-								paramName.pop_back();
-							std::transform(paramName.begin(), paramName.end(), paramName.begin(),
-								[](unsigned char c){return std::tolower(c);});
-							val.remove_prefix(paramName.size()+1);
-							while(val.front()==' ')
-								val.remove_prefix(1);
-							std::string paramVal;
-							if(val.find(';')!=std::string_view::npos)
-								paramVal=val.substr(0, val.find(';'));
-							else
-								paramVal=val;
-							val.remove_prefix(paramVal.size());
-							if(paramVal.front()=='"'&&paramVal.back()=='"')
-							{
-								paramVal.erase(0, 1);
-								paramVal.pop_back();
-							}
-							if(paramName=="name")
-								key=paramVal;
-							else if(paramName=="filename")
-								data->fileName=paramVal;
-							if(val.front()==';')
-								val.remove_prefix(1);
 						}
 
 					}
@@ -372,12 +318,10 @@ uint16_t Request::parseBody()
 					multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
 				//erase headers part plus \r\n\r\n
 				bodyPart.remove_prefix(headersEnd+4);
-				//erase \r\n from the end
-				if(bodyPart.ends_with("\r\n"))
-					bodyPart.remove_suffix(2);
 				data->content=new std::string(bodyPart);
 				multipartFormData_->at(key)->push_back(data);
-				body.remove_prefix(body.find("--"+boundary));
+				//move to the next \r\n--boundary sequence
+				body.remove_prefix(body.find("\r\n--"+boundary));
 			}
 			//body parsed, no need to store it
 			body_.clear();
@@ -515,6 +459,83 @@ bool Request::parseConnectionHeader()
 			return false;
 	//keep-alive is default for HTTP/1.1
 	return protocolVersion_.min==1;
+}
+
+bool Request::parseContentDisposition(std::string_view line, std::string &name, std::string &filename)
+{
+	auto pos=line.find(';');
+	if(pos==std::string_view::npos)
+		return false;
+	std::string cd{line.substr(0, pos)};
+	std::transform(cd.begin(), cd.end(), cd.begin(),
+		[](unsigned char c){return std::tolower(c);});
+	if(cd!="form-data")
+		return false;
+	line.remove_prefix(pos+1);
+
+	//remove spaces in front if any, split to key and val by = and remove spaces from key back if any
+	//lowercase key, erase it from line, clear spaces from val front if any, read val till ; or end
+	while(!line.empty())
+	{
+		while(!line.empty()&&line.front()==' ')
+			line.remove_prefix(1);
+		pos=line.find('=');
+		if(pos==std::string_view::npos)
+			return false;
+		std::string paramName{line.substr(0, pos)};
+		while(!paramName.empty()&&paramName.back()==' ')
+			paramName.pop_back();
+		std::transform(paramName.begin(), paramName.end(), paramName.begin(),
+			[](unsigned char c){return std::tolower(c);});
+		line.remove_prefix(pos+1);
+		while(!line.empty()&&line.front()==' ')
+			line.remove_prefix(1);
+		std::string paramVal;
+
+		pos=findSemicolon(line);
+		paramVal=line.substr(0, pos);
+
+		if(paramVal.empty())
+			return false;
+		line.remove_prefix(paramVal.size());
+		if(paramVal.front()=='"'&&paramVal.back()=='"')
+		{
+			paramVal.erase(0, 1);
+			if(paramVal.empty())
+				return false;
+			paramVal.pop_back();
+		}
+		//only opening or closing quote, malformed data
+		else if(paramVal.front()=='"'||paramVal.back()=='"')
+			return false;
+		if(paramName=="name")
+		{
+			if(paramVal.empty())
+				return false;
+			name=paramVal;
+		}
+		else if(paramName=="filename")
+			filename=paramVal;
+		if(!line.empty()&&line.front()==';')
+			line.remove_prefix(1);
+	}
+	return true;
+}
+
+size_t Request::findSemicolon(std::string_view line)
+{
+	size_t pos=0;
+	bool quoted=false;
+	while(pos<line.size())
+	{
+		if(line.at(pos)==';'&&!quoted)
+			break;
+		if(line.at(pos)=='"')
+			if((pos>0&&line.at(pos-1)!='\\')||pos==0)
+				quoted=!quoted;
+		pos++;
+	}
+	return pos;
 }
 
 Request::~Request()

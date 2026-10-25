@@ -75,6 +75,8 @@ class Request
 		bool manageHeaderDuplicate(std::string &key, std::string &val);
 		bool parseProtoVersion();
 		bool parseConnectionHeader();
+		bool parseContentDisposition(std::string_view line, std::string &name, std::string &filename);
+		size_t findSemicolon(std::string_view line);
 
 //		const static inline std::unordered_map<std::string, RequestMethod> methodMap_=
 		const std::unordered_map<std::string, RequestMethod> methodMap_=
