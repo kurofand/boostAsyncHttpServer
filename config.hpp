@@ -19,3 +19,11 @@
 #ifndef BODY_IDLE_TIMEOUT
 #define BODY_IDLE_TIMEOUT 3
 #endif
+
+#ifndef MAX_CLIENTS
+#define MAX_CLIENTS 64
+#endif
+
+#ifndef MAX_PENDING_CLIENTS
+#define MAX_PENDING_CLIENTS 128
+#endif

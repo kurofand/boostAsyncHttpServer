@@ -5,6 +5,7 @@
 
 #include "request.hpp"
 #include "response.hpp"
+#include "connectionManager.hpp"
 
 #include "common.hpp"
 #include "config.hpp"
@@ -245,12 +246,37 @@ boost::asio::awaitable<void> startListen()
 {
 	const auto executor=co_await boost::asio::this_coro::executor;
 	tcp::acceptor acceptor{executor, {tcp::v4(), 8080}};
+	auto *manager=new ConnectionManager(executor);
+
 	for(;;)
 	{
 		std::cout<<"wait for connection"<<std::endl;
 		tcp::socket socket=co_await acceptor.async_accept(boost::asio::use_awaitable);
 		std::cout<<"incoming connection"<<std::endl;
-		boost::asio::co_spawn(executor, handleConnection(std::move(socket)), boost::asio::detached);
+//		boost::asio::co_spawn(executor, handleConnection(std::move(socket)), boost::asio::detached);
+		boost::asio::co_spawn(executor, [manager, socket=std::move(socket)]() mutable -> boost::asio::awaitable<void>
+			{
+				try
+				{
+					co_await manager->acquire();
+					try
+					{
+						co_await handleConnection(std::move(socket));
+					}
+					catch(...)
+					{
+						manager->release();
+						throw;
+					}
+					manager->release();
+				}
+				catch(const std::runtime_error&)
+				{
+					socket.close();
+				}
+
+			},
+			boost::asio::detached);
 	}
 }
 
