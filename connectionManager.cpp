@@ -12,10 +12,12 @@ boost::asio::awaitable<void> ConnectionManager::acquire()
 	if(queue_.size()>=MAX_PENDING_CLIENTS)
 		throw std::runtime_error("Queue is full");
 
-	auto *waiter=new PermitChannel(executor_, 1);
+	auto *waiter=new PendingConnection{PermitChannel(executor_, 1), PendingState::Pending};
 	queue_.push_back(waiter);
 
-	(void)co_await waiter->async_receive(boost::asio::use_awaitable);
+	(void)co_await waiter->channel.async_receive(boost::asio::use_awaitable);
+
+	delete waiter;
 }
 
 void ConnectionManager::release()
@@ -28,11 +30,15 @@ void ConnectionManager::release()
 		auto *waiter=queue_.front();
 		queue_.pop_front();
 
-		if(waiter->try_send(boost::system::error_code{}, true))
-		{
-			delete waiter;
+		if(waiter->state!=PendingState::Pending)
+			continue;
+
+		waiter->state=PendingState::Granted;
+
+		if(waiter->channel.try_send(boost::system::error_code{}, true))
 			return;
-		}
+		//TODO:
+		//handle try_send error
 	}
 	active_--;
 }
