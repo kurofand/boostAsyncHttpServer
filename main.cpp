@@ -258,7 +258,12 @@ boost::asio::awaitable<void> startListen()
 			{
 				try
 				{
-					co_await manager->acquire();
+					//co_await manager->acquire();
+					if(!(co_await manager->acquire()))
+					{
+						socket.close();
+						co_return;
+					}
 					try
 					{
 						co_await handleConnection(std::move(socket));

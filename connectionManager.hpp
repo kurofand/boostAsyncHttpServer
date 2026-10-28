@@ -26,14 +26,16 @@ class ConnectionManager
 {
 	public:
 		ConnectionManager(boost::asio::any_io_executor executor): executor_(std::move(executor)){};
-		boost::asio::awaitable<void> acquire();
+		boost::asio::awaitable<bool> acquire();
 		void release();
+		void stop();
 		std::size_t active(){return active_;}
 		std::size_t waiting(){return queue_.size();}
 		~ConnectionManager();
 	private:
 		boost::asio::any_io_executor executor_;
 		size_t active_=0;
+		bool stopping_=false;
 		std::deque<PendingConnection*> queue_;
 };
 
