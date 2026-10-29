@@ -10,7 +10,9 @@ enum class ReadResult: uint16_t
 	HEADERS_TOO_LARGE=431,
 	UNSUPPORTED_MEDIA_TYPE=415,
 	NOT_IMPLEMENTED=501,
-	NETWORK_ERROR
+	NETWORK_ERROR,
+	//scenarios when error did not occure, but connection should be closed
+	CLOSE_CONNECTION
 };
 
 enum class RequestMethod

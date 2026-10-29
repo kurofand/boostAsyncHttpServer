@@ -58,7 +58,14 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 		if(ec==boost::asio::error::not_found&&buffer.size()==HEADERS_SIZE_LIMIT)
 			co_return ReadResult::HEADERS_TOO_LARGE;
 		else if(ec==boost::asio::error::operation_aborted&&timedout)
-			co_return ReadResult::TIMEOUT;
+		{
+			if(headerLength>0)
+				co_return ReadResult::TIMEOUT;
+			else
+			//keep-alive scenario when header reading timeout fires before
+			//connection timeout - read bytes==0, reading cancelled
+				co_return ReadResult::CLOSE_CONNECTION;
+		}
 		else
 			co_return ReadResult::NETWORK_ERROR;
 	}
@@ -170,6 +177,7 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 		switch(readResult)
 		{
 			case ReadResult::NETWORK_ERROR:
+			case ReadResult::CLOSE_CONNECTION:
 			{
 				delete request;
 				boost::system::error_code ec;

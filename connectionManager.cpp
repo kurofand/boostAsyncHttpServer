@@ -69,6 +69,9 @@ void ConnectionManager::release()
 
 void ConnectionManager::stop()
 {
+	if(stopping_)
+		return;
+
 	stopping_=true;
 	for(auto *waiter: queue_)
 	{
@@ -84,9 +87,5 @@ void ConnectionManager::stop()
 
 ConnectionManager::~ConnectionManager()
 {
-	while(!queue_.empty())
-	{
-		delete queue_.front();
-		queue_.pop_front();
-	}
+	stop();
 }
