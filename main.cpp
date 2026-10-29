@@ -1,7 +1,9 @@
 #include <boost/asio.hpp>
+#include <boost/asio/signal_set.hpp>
 #include <string>
 #include <string_view>
 #include <iostream>
+#include <csignal>
 
 #include "request.hpp"
 #include "response.hpp"
@@ -255,11 +257,28 @@ boost::asio::awaitable<void> startListen()
 	const auto executor=co_await boost::asio::this_coro::executor;
 	tcp::acceptor acceptor{executor, {tcp::v4(), 8080}};
 	auto *manager=new ConnectionManager(executor);
+	boost::asio::signal_set signals(executor, SIGINT, SIGTERM);
+
+	signals.async_wait(
+		[&acceptor, manager](const boost::system::error_code &ec, int signal)
+		{
+			if(ec)
+				return;
+			//wait for signal and stop the server
+			acceptor.close();
+			manager->stop();
+		});
+
 
 	for(;;)
 	{
 		std::cout<<"wait for connection"<<std::endl;
-		tcp::socket socket=co_await acceptor.async_accept(boost::asio::use_awaitable);
+		boost::system::error_code ec;
+		tcp::socket socket=co_await acceptor.async_accept(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+
+		if(ec==boost::asio::error::operation_aborted)
+			break;
+
 		std::cout<<"incoming connection"<<std::endl;
 //		boost::asio::co_spawn(executor, handleConnection(std::move(socket)), boost::asio::detached);
 		boost::asio::co_spawn(executor, [manager, socket=std::move(socket)]() mutable -> boost::asio::awaitable<void>
