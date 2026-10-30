@@ -12,25 +12,27 @@
 #include "common.hpp"
 #include "config.hpp"
 
+#include "Log/log.hpp"
+
 using boost::asio::ip::tcp;
 
 boost::asio::awaitable<bool> writeResponse(tcp::socket &socket, Response *response)
 {
-	std::cout<<"prepare response"<<std::endl;
+	Log(LogLevel::Debug)<<"Preparing response stream";
 	boost::asio::streambuf sResponse;
 	std::ostream oStream(&sResponse);
 	response->setContentLength();
 	response->toStream(oStream);
-	std::cout<<"response prepared"<<std::endl;
+	Log(LogLevel::Debug)<<"Response stream prepared";
 	bool res=true;
 	boost::system::error_code ec;
 	co_await boost::asio::async_write(socket, sResponse, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
 	if(ec)
 	{
-		std::cout<<"Error on sent response: "<<ec.message()<<std::endl;
+		Log(LogLevel::Error)<<"Error on writing response: "<<ec.message();
 		res=false;
 	}
-	std::cout<<"response sent"<<std::endl;
+	Log(LogLevel::Debug)<<"Response sent";
 	delete response;
 	co_return res;
 }
@@ -157,12 +159,12 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 						return;
 					if(ec)
 						return;
-					std::cout<<"connection timeout\n";
+					Log(LogLevel::Debug)<<"Connection timeout";
 					timedout=true;
 					socket.close();
 				});
 		}
-		std::cout<<"read request"<<std::endl;
+		Log(LogLevel::Debug)<<"Reading request";
 
 		auto *request=new Request();
 		const auto readResult=co_await readRequest(socket, sRequest, request);
@@ -240,7 +242,7 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			}*/
 
 
-		std::cout<<"Parsing complete"<<std::endl;
+		Log(LogLevel::Debug)<<"Request parsing complete";
 		delete request;
 		const bool writeSuccess=co_await writeResponse(socket, response);
 		if(!keepAlive||!writeSuccess)
@@ -265,6 +267,7 @@ boost::asio::awaitable<void> startListen()
 			if(ec)
 				return;
 			//wait for signal and stop the server
+			Log(LogLevel::Info)<<"Server shutdown initiated";
 			acceptor.close();
 			manager->stop();
 		});
@@ -272,15 +275,14 @@ boost::asio::awaitable<void> startListen()
 
 	for(;;)
 	{
-		std::cout<<"wait for connection"<<std::endl;
+		Log(LogLevel::Debug)<<"Waiting for a new connection";
 		boost::system::error_code ec;
 		tcp::socket socket=co_await acceptor.async_accept(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
 
 		if(ec==boost::asio::error::operation_aborted)
 			break;
 
-		std::cout<<"incoming connection"<<std::endl;
-//		boost::asio::co_spawn(executor, handleConnection(std::move(socket)), boost::asio::detached);
+		Log(LogLevel::Debug)<<"Incoming connection";
 		boost::asio::co_spawn(executor, [manager, socket=std::move(socket)]() mutable -> boost::asio::awaitable<void>
 			{
 				try
@@ -315,7 +317,7 @@ boost::asio::awaitable<void> startListen()
 void run()
 {
 	boost::asio::io_context ioContext;
-	std::cout<<"server started"<<std::endl;
+	Log(LogLevel::Info)<<"server started";
 	boost::asio::co_spawn(ioContext, startListen, boost::asio::detached);
 	ioContext.run();
 }

@@ -6,11 +6,13 @@
 #include <algorithm>
 #include <cstring>
 
+#include "Log/log.hpp"
+
 bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 {
+	Log(LogLevel::Debug)<<"Parsing headers...";
 	std::string line;
 	getline(is, line);
-	std::cout<<"Bytes to read: "<<bytesToRead<<std::endl;
 	auto readBytes=line.size()+1;
 	if(!line.empty()&&line.back()=='\r')
 		line.pop_back();
@@ -19,7 +21,7 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	auto sp=line.find(' ');
 	if(sp==std::string::npos)
 	{
-		std::cout<<"Request line does not contain a space, aborting\n";
+		Log(LogLevel::Warning)<<"Request line does not contain a space, aborting";
 		return false;
 	}
 	std::string method=line.substr(0, sp);
@@ -27,11 +29,11 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		method_=methodMap_.at(method);
 	else
 	{
-		std::cout<<"Unknown HTTP method: \""<<method<<"\", aborting\n";
+		Log(LogLevel::Warning)<<"Unknown HTTP method: \""<<method<<"\", aborting";
 		return false;
 	}
 
-	std::cout<<"Method: \""<<method<<"\"\n";
+	Log(LogLevel::Debug)<<"Request method: "<<method;
 	line.erase(0, sp+1);
 
 	sp=line.rfind(' ');
@@ -39,7 +41,7 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	//usual protocol str HTTP/1.0
 	if(!proto.starts_with("HTTP/"))
 	{
-		std::cout<<"Unknown protocol: \""<<proto<<"\", aborting\n";
+		Log(LogLevel::Warning)<<"Unknown protocol: \""<<proto<<"\", aborting";
 		return false;
 	}
 	protocol_=proto;
@@ -56,12 +58,12 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	protocolVersion_.min=version[2]-'0';
 	}*/
 
-	std::cout<<"Proto: \""<<protocol_<<"\"\n";
+	Log(LogLevel::Debug)<<"Protocol: "<<protocol_;
 	line.erase(sp);
 	}
 	if(!parseProtoVersion())
 	{
-		std::cout<<"Failed to parse protocol version"<<std::endl;
+		Log(LogLevel::Warning)<<"Failed to parse protocol version, aborting";
 		return false;
 	}
 
@@ -74,12 +76,13 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		const std::string params{line.substr(q+1)};
 		fillMapFromString(params, '&', params_);
 		line.erase(q);
-		std::cout<<"Params: \n";
+		std::string logstr="Params: \n";
 		for(const auto &[key, val]: *params_)
-			std::cout<<"\t\""<<key<<"\": \""<<val<<"\"\n";
+			logstr+="\t\""+key+"\": \""+val+"\"\n";
+		Log(LogLevel::Debug)<<logstr;
 	}
 	path_=line;
-	std::cout<<"URI: \""<<path_<<"\"\n";
+	Log(LogLevel::Debug)<<"URI: \""<<path_<<"\"";
 	}
 
 	//single line request
@@ -138,9 +141,10 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 
 	keepAlive_=parseConnectionHeader();
 
-	std::cout<<"Headers:\n";
+	std::string logstr="Headers:\n";
 	for(const auto &[key, val]: *headers_)
-		std::cout<<"\t\""<<key<<"\": \""<<val<<"\"\n";
+		logstr+="\t\""+key+"\": \""+val+"\"\n";
+	Log(LogLevel::Debug)<<logstr;
 
 	return true;
 }
