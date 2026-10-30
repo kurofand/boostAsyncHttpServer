@@ -203,6 +203,10 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			}
 		};
 
+		const auto requestProtoVer=request->protocolVersion();
+		if(requestProtoVer.maj!=0)
+			response->protocolVersion(requestProtoVer);
+
 		if(readResult!=ReadResult::OK)
 		{
 			delete request;

@@ -19,6 +19,7 @@ class Response
 		void body(std::string &&s){body_=s;}
 		void toStream(std::ostream &stream);
 		void keepAlive(bool b){keepAlive_=b;}
+		void protocolVersion(ProtocolVersion v){protocolVersion_=v;}
 		uint16_t responseCode(){return responseCode_;}
 
 		static const std::unordered_map<uint16_t, std::string> responseCodes;
@@ -28,10 +29,11 @@ class Response
 		RequestMethod requestMethod_;
 		uint16_t responseCode_=200;
 		std::unordered_map<std::string, std::string> headers_;
-		const char* proto="HTTP/1.0";
+		const char* proto="HTTP";
 		std::string basicRealm_;
 		std::string body_;
 		bool keepAlive_=false;
+		ProtocolVersion protocolVersion_{1,1};
 };
 
 #endif

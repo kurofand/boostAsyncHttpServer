@@ -25,7 +25,12 @@ const std::unordered_map<uint16_t, std::string> Response::responseCodes=
 void Response::toStream(std::ostream &stream)
 {
 //goal is fill stream for writing to socket with protocol
-	stream<<proto<<" ";
+	stream<<proto<<'/';
+	if(protocolVersion_.maj==1)
+		stream<<+protocolVersion_.maj<<'.'<<+protocolVersion_.min;
+	else
+		stream<<+protocolVersion_.maj;
+	stream<<" ";
 //response code
 	stream<<responseCode_<<" ";
 	if(responseCodes.contains(responseCode_))
