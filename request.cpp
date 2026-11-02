@@ -545,6 +545,60 @@ size_t Request::findSemicolon(std::string_view line)
 	return pos;
 }
 
+std::string Request::multipartBoundary()
+{
+	std::string boundary;
+
+	if(headers_==nullptr&&!headers_->contains("content-type"))
+		return "";
+	std::string_view contentType(headers_->at("content-type").c_str(), headers_->at("content-type").size());
+	auto pos=contentType.find(';');
+	if(pos==std::string_view::npos)
+		return "";
+	contentType.remove_prefix(pos+1);
+	while(!contentType.empty()&&contentType.front()==' ')
+		contentType.remove_prefix(1);
+
+	while(!contentType.empty())
+	{
+		pos=contentType.find('=');
+		if(pos==std::string_view::npos)
+			return "";
+
+		std::string key{contentType.substr(0, pos)};
+		while(!key.empty()&&key.back()==' ')
+			key.pop_back();
+		std::transform(key.begin(), key.end(), key.begin(),
+			[](unsigned char c){return std::tolower(c);});
+
+		contentType.remove_prefix(pos+1);
+		while(contentType.front()==' ')
+			contentType.removePrefix(1);
+		pos=findSemicolon(contentType);
+		auto val=contentType.substr(pos);
+		contentType.remove_prefix(val.size());
+		if(val.front()=='"')
+		{
+			if(val.back()!='"')
+				return "";
+			val.remove_prefix(1);
+			val.remove_suffix(1);
+		}
+
+		if(key=="boundary")
+		{
+			boundary=val;
+			if(boundary.size()>70)
+				return "";
+			return boundary;
+		}
+		while(!contentType.empty()&&(contentType.front()==';'||contentType.front()==' '))
+			contentType.remove_prefix(1);
+	}
+
+	return "";
+}
+
 Request::~Request()
 {
 	if(params_!=nullptr)

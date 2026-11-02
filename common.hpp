@@ -7,8 +7,8 @@ enum class ReadResult: uint16_t
 	BAD_REQUEST=400,
 	TIMEOUT=408,
 	PAYLOAD_TOO_LARGE=413,
-	HEADERS_TOO_LARGE=431,
 	UNSUPPORTED_MEDIA_TYPE=415,
+	HEADERS_TOO_LARGE=431,
 	NOT_IMPLEMENTED=501,
 	NETWORK_ERROR,
 	//scenarios when error did not occure, but connection should be closed

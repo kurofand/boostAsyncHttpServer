@@ -104,6 +104,61 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 
 	auto available=buffer.size();
 	std::string body(contentLength, '\0');
+/*
+	std::string boundary=request->multipartBoundary();
+	if(boundary.empty())
+		co_return ReadResult::BAD_REQUEST;
+
+	MultipartParser parser(boundary, contentLength);
+	if(available>=contentLength)
+	{
+		is.read(&body[], contentLength);
+		std::string_view chunk(body.c_str(), body.size());
+		co_return parser.parseChunk(chunk);
+	}
+	else
+	{
+		is.read(&body[0], available);
+		std::string_view chunk(body.c_str, available);
+		auto parseRes=parser.parseChunk(chunk);
+		if(parseRes!=ReadResult::OK)
+			co_return parseRes;
+
+		size_t remaining=contentLength-available;
+		while(remaining>0)
+		{
+			std::string buf;
+			timedout=false;
+			bool chunkRead=false;
+			timer.expiter_after(std::chrono::seconds(BODY_IDLE_TIMEOUT));
+			timer.async_wait([&socket, &timedout, &chunkRead](const boost::system::error_code &ec)
+				{
+					if(ec||chunkRead)
+						return;
+					timedout=true;
+					socket.cancel();
+				});
+			const auto bytes=co_await socket.async_read_some(boost::asio::buffer(buf.data(), remaining), boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+			chunkRead=true;
+			timer.cancel();
+			if(ec)
+			{
+				if(ec==boost::asio::error::operation_aborted&&timedout)
+					co_return ReadResult::TIMEOUT;
+				else
+					co_return ReadResult::NETWORK_ERROR;
+			}
+
+			chunk=buf;
+			parseRes=parser.parseChunk(chunk);
+			if(parseRes!=ReadResult::OK)
+				co_return parseRes;
+			available+=bytes;
+			remaining-=bytes;
+		}
+	}
+	co_return ReadResult::OK;
+*/
 	if(available>=contentLength)
 		is.read(&body[0], contentLength);
 	else

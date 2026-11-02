@@ -51,6 +51,7 @@ class Request
 		std::unordered_map<std::string, std::vector<MultipartFormData*>*>* multipartFormData(){return multipartFormData_;}
 		ProtocolVersion protocolVersion(){return protocolVersion_;}
 		bool keepAlive(){return keepAlive_;}
+		std::string multipartBoundary();
 		~Request();
 
 	private:
