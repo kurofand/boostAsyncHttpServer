@@ -1,6 +1,14 @@
 #ifndef MULTIPART_PARSER_HPP
 #define MULTIPART_PARSER_HPP
 
+#include <string>
+#include <cstdint>
+#include <string_view>
+#include <unordered_map>
+
+#include "common.hpp"
+#include "request.hpp"
+
 enum class MultipartParserState
 {
 	WaitingForData,
@@ -25,7 +33,10 @@ class MultipartParser
 		std::string remainingPart_;
 		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=nullptr;
 		MultipartFormData *formData_=nullptr;
-		ParserState currentState_=MultipartParserState::WaitingForData;
+		std::string key;
+		MultipartParserState currentState_=MultipartParserState::WaitingForData;
+		bool parseContentDisposition(std::string_view line, std::string &name, std::string &filename);
+		size_t findSemicolon(std::string_view line);
 };
 
 #endif

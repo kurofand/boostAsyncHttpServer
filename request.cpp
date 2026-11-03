@@ -573,7 +573,7 @@ std::string Request::multipartBoundary()
 
 		contentType.remove_prefix(pos+1);
 		while(contentType.front()==' ')
-			contentType.removePrefix(1);
+			contentType.remove_prefix(1);
 		pos=findSemicolon(contentType);
 		auto val=contentType.substr(pos);
 		contentType.remove_prefix(val.size());

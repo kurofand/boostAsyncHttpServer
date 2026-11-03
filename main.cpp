@@ -8,6 +8,7 @@
 #include "request.hpp"
 #include "response.hpp"
 #include "connectionManager.hpp"
+#include "multipartParser.hpp"
 
 #include "common.hpp"
 #include "config.hpp"
