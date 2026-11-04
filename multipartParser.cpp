@@ -3,6 +3,8 @@
 #include <sstream>
 #include <algorithm>
 
+#include "Log/log.hpp"
+
 ReadResult MultipartParser::parseChunk(std::string_view chunk)
 {
 	std::string tmp=remainingPart_+chunk.data();
@@ -20,7 +22,6 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				if(chunk.size()<boundary_.size()+4)
 				{
 					parsing=false;
-//					remainingPart_=chunk.data();
 					break;
 				}
 
@@ -74,7 +75,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				chunk.remove_prefix(headers.size());
 				std::stringstream ss(headers);
 				std::string line;
-				while(getline(ss, line, '\n'))
+				while(getline(ss, line, '\n')&&line!="\r")
 				{
 					if(!line.empty()&&line.back()=='\r')
 						line.pop_back();
@@ -112,7 +113,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				currentState_=MultipartParserState::Headers;
 				break;
 			}
-			case MultipartParserState::Body:
+			case MultipartParserState::Headers:
 			{
 				size_t pos;
 				{
@@ -124,19 +125,38 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				if(pos!=std::string_view::npos)
 					currentState_=MultipartParserState::WaitingForData;
 				else
-					pos=chunk.size();
+				{
+					//body incomplete, wait for next chunk
+					parsing=false;
+					break;
+				}
 
 				if(formData_->content==nullptr)
 					formData_->content=new std::string(chunk.substr(0, pos));
 				else
 					formData_->content->append(chunk.substr(0, pos));
 				chunk.remove_prefix(pos);
+
 				if(currentState_==MultipartParserState::WaitingForData)
 				{
-
+					if(!multipartFormData_->contains(key))
+						multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
+					multipartFormData_->at(key)->push_back(formData_);
 					formData_=nullptr;
 					key.clear();
 				}
+
+				{
+				std::string tmp=boundary_.data();
+				if(chunk=="\r\n--"+tmp+"--\r\n")
+				{
+					currentState_==MultipartParserState::Complete;
+					return ReadResult::OK;
+				}
+				}
+
+				//remove \r\n before next boundary
+				chunk.remove_prefix(2);
 				break;
 			}
 		};
@@ -165,7 +185,7 @@ bool MultipartParser::parseContentDisposition(std::string_view line, std::string
 		while(!line.empty()&&line.front()==' ')
 			line.remove_prefix(1);
 		pos=line.find('=');
-		if(pos==std::string_view::npos)
+ 		if(pos==std::string_view::npos)
 			return false;
 		std::string paramName{line.substr(0, pos)};
 		while(!paramName.empty()&&paramName.back()==' ')
@@ -217,10 +237,17 @@ size_t MultipartParser::findSemicolon(std::string_view line)
 			break;
 		if(line.at(pos)=='"')
 			if((pos>0&&line.at(pos-1)!='\\')||pos==0)
-				quoted!=quoted;
+				quoted=!quoted;
 		pos++;
 	}
 	return pos;
+}
+
+std::unordered_map<std::string, std::vector<MultipartFormData*>*>* MultipartParser::multipartFormData()
+{
+	auto *tmp=multipartFormData_;
+	multipartFormData_=nullptr;
+	return tmp;
 }
 
 MultipartParser::~MultipartParser()

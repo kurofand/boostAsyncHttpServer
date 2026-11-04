@@ -575,7 +575,7 @@ std::string Request::multipartBoundary()
 		while(contentType.front()==' ')
 			contentType.remove_prefix(1);
 		pos=findSemicolon(contentType);
-		auto val=contentType.substr(pos);
+		auto val=contentType.substr(0, pos);
 		contentType.remove_prefix(val.size());
 		if(val.front()=='"')
 		{

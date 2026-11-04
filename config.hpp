@@ -32,3 +32,7 @@
 #ifndef MIN_LOG_LEVEL
 #define MIN_LOG_LEVEL 0
 #endif
+
+#ifndef READ_CHUNK_SIZE
+#define READ_CHUNK_SIZE 1024
+#endif

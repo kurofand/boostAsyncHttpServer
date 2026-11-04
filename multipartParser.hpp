@@ -26,12 +26,13 @@ class MultipartParser
 			boundary_(boundary), contentLength_(contentLength){};
 		ReadResult parseChunk(std::string_view chunk);
 		MultipartParserState currentState(){return currentState_;}
+		std::unordered_map<std::string, std::vector<MultipartFormData*>*>* multipartFormData();
 		~MultipartParser();
 	private:
 		const uint16_t contentLength_;
 		std::string_view boundary_;
 		std::string remainingPart_;
-		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=nullptr;
+		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
 		MultipartFormData *formData_=nullptr;
 		std::string key;
 		MultipartParserState currentState_=MultipartParserState::WaitingForData;
