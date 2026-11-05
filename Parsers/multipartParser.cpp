@@ -3,11 +3,22 @@
 #include <sstream>
 #include <algorithm>
 
-#include "Log/log.hpp"
+#include "../Log/log.hpp"
+#include "../utils.hpp"
+
+MultipartParser::MultipartParser(std::string_view boundary, const uint16_t &contentLength):
+                        boundary_(boundary), contentLength_(contentLength)
+{
+	result_=new ParsingResult();
+	result_->multipartFormData=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
+}
 
 ReadResult MultipartParser::parseChunk(std::string_view chunk)
 {
-	std::string tmp=remainingPart_+chunk.data();
+	std::string tmp;
+	tmp.append(remainingPart_);
+	remainingPart_.clear();
+	tmp.append(chunk.data(), chunk.size());
 	chunk=tmp;
 
 	bool parsing=true;
@@ -139,9 +150,9 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 
 				if(currentState_==MultipartParserState::WaitingForData)
 				{
-					if(!multipartFormData_->contains(key))
-						multipartFormData_->insert({key, new std::vector<MultipartFormData*>()});
-					multipartFormData_->at(key)->push_back(formData_);
+					if(!result_->multipartFormData->contains(key))
+						result_->multipartFormData->insert({key, new std::vector<MultipartFormData*>()});
+					result_->multipartFormData->at(key)->push_back(formData_);
 					formData_=nullptr;
 					key.clear();
 				}
@@ -161,8 +172,12 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			}
 		};
 
-		remainingPart_=chunk.data();
+//		remainingPart_.clear();
+//		remainingPart_.append(chunk.data(), chunk.size());
 	}
+
+	if(!chunk.empty())
+		remainingPart_.append(chunk.data(), chunk.size());
 	return ReadResult::OK;
 }
 
@@ -227,46 +242,28 @@ bool MultipartParser::parseContentDisposition(std::string_view line, std::string
 	return true;
 }
 
-size_t MultipartParser::findSemicolon(std::string_view line)
-{
-	size_t pos=0;
-	bool quoted=false;
-	while(pos<line.size())
-	{
-		if(line.at(pos)==';'&&!quoted)
-			break;
-		if(line.at(pos)=='"')
-			if((pos>0&&line.at(pos-1)!='\\')||pos==0)
-				quoted=!quoted;
-		pos++;
-	}
-	return pos;
-}
-
-std::unordered_map<std::string, std::vector<MultipartFormData*>*>* MultipartParser::multipartFormData()
-{
-	auto *tmp=multipartFormData_;
-	multipartFormData_=nullptr;
-	return tmp;
-}
-
 MultipartParser::~MultipartParser()
 {
-	if(multipartFormData_!=nullptr)
+	if(result_!=nullptr)
 	{
-		for(auto &[key, val]: *multipartFormData_)
-			if(val!=nullptr)
-			{
-				for(auto &it: *multipartFormData_->at(key))
-					if(it!=nullptr)
-					{
-						if(it->content!=nullptr)
-							delete it->content;
-						delete it;
-					}
-				delete val;
-			}
-		delete multipartFormData_;
+		auto *multipartFormData=result_->multipartFormData;
+		if(multipartFormData!=nullptr)
+		{
+			for(auto &[key, val]: *multipartFormData)
+				if(val!=nullptr)
+				{
+					for(auto &it: *multipartFormData->at(key))
+						if(it!=nullptr)
+						{
+							if(it->content!=nullptr)
+								delete it->content;
+							delete it;
+						}
+					delete val;
+				}
+			delete multipartFormData;
+		}
+		delete result_;
 	}
 	if(formData_!=nullptr)
 		delete formData_;

@@ -2,13 +2,15 @@
 #include <boost/asio/signal_set.hpp>
 #include <string>
 #include <string_view>
-//#include <iostream>
+#include <iostream>
 #include <csignal>
 
 #include "request.hpp"
 #include "response.hpp"
 #include "connectionManager.hpp"
-#include "multipartParser.hpp"
+
+#include "Parsers/multipartParser.hpp"
+#include "Parsers/urlencodedParser.hpp"
 
 #include "common.hpp"
 #include "config.hpp"
@@ -106,24 +108,42 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	auto available=buffer.size();
 	std::string body(contentLength, '\0');
 
-	std::string boundary=request->multipartBoundary();
-	if(boundary.empty())
-		co_return ReadResult::BAD_REQUEST;
 
-	MultipartParser parser(boundary, contentLength);
+	Parser *parser=nullptr;
+	switch(request->contentType())
+	{
+		case ContentType::APPLICATION_X_WWW_FORM_URLENCODED:
+			parser=new UrlencodedParser();
+			break;
+		case ContentType::MULTIPART_FORM_DATA:
+		{
+			std::string boundary=request->multipartBoundary();
+			if(boundary.empty())
+				co_return ReadResult::BAD_REQUEST;
+			parser=new MultipartParser(boundary, contentLength);
+			break;
+		}
+		default:
+			co_return ReadResult::UNSUPPORTED_MEDIA_TYPE;
+	};
 	if(available>=contentLength)
 	{
 		is.read(&body[0], contentLength);
 		std::string_view chunk(body.c_str(), body.size());
-		co_return parser.parseChunk(chunk);
+		auto parseRes=parser->parseChunk(chunk);
+		delete parser;
+		co_return parseRes;
 	}
 	else
 	{
 		is.read(&body[0], available);
 		std::string_view chunk(body.c_str(), available);
-		auto parseRes=parser.parseChunk(chunk);
+		auto parseRes=parser->parseChunk(chunk);
 		if(parseRes!=ReadResult::OK)
+		{
+			delete parser;
 			co_return parseRes;
+		}
 
 		size_t remaining=contentLength-available;
 		char buf[READ_CHUNK_SIZE];
@@ -145,6 +165,7 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 			timer.cancel();
 			if(ec)
 			{
+				delete parser;
 				if(ec==boost::asio::error::operation_aborted&&timedout)
 					co_return ReadResult::TIMEOUT;
 				else
@@ -152,49 +173,19 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 			}
 
 			chunk=std::string_view(buf, bytes);
-			parseRes=parser.parseChunk(chunk);
+			parseRes=parser->parseChunk(chunk);
 			if(parseRes!=ReadResult::OK)
+			{
+				delete parser;
 				co_return parseRes;
+			}
 			remaining-=bytes;
 		}
-		request->multipartFormData(parser.multipartFormData());
+		request->parsedBody(parser->result());
 	}
+	delete parser;
 	co_return ReadResult::OK;
 
-/*	if(available>=contentLength)
-		is.read(&body[0], contentLength);
-	else
-	{
-		is.read(&body[0], available);
-		size_t remaining=contentLength-available;
-		while(remaining>0)
-		{
-			timedout=false;
-			bool chunkRead=false;
-			timer.expires_after(std::chrono::seconds(BODY_IDLE_TIMEOUT));
-			timer.async_wait([&socket, &timedout, &chunkRead](const boost::system::error_code &ec)
-				{
-					if(ec||chunkRead)
-						return;
-					timedout=true;
-					socket.cancel();
-				});
-			const auto bytes=co_await socket.async_read_some(boost::asio::buffer(body.data()+available, remaining), boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-			chunkRead=true;
-			timer.cancel();
-			if(ec)
-			{
-				if(ec==boost::asio::error::operation_aborted&&timedout)
-					co_return ReadResult::TIMEOUT;
-				else
-					co_return ReadResult::NETWORK_ERROR;
-			}
-			available+=bytes;
-			remaining-=bytes;
-		}
-	}
-	request->body(body);
-	co_return ReadResult::OK;*/
 }
 
 boost::asio::awaitable<void> handleConnection(tcp::socket socket)
@@ -286,21 +277,27 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 		response->keepAlive(keepAlive);
 		response->setConnectionStatus();
 
-/*		if(request->formData()!=nullptr)
-			for(const auto &[key, val]: *request->formData())
-			{
-				std::cout<<"\""<<key<<"\": ";
-				for(const auto &e: *val)
-					std::cout<<"\""<<e<<"\",";
-				std::cout<<std::endl;
-			}*/
-/*		if(request->multipartFormData()!=nullptr)
-			for(const auto &[key, val]: *request->multipartFormData())
-			{
-				std::cout<<"\""<<key<<"\":\n";
-				for(const auto &e: *val)
-					std::cout<<"File name: "<<e->fileName<<"; Content type: "<<e->contentType<<"; Content: \n\""<<*e->content<<"\"\n";
-			}*/
+		if(request->parsedBody()!=nullptr)
+		{
+			std::cout<<"aaaaqa\n";
+			auto *multipartFormData=request->parsedBody()->multipartFormData;
+			if(multipartFormData!=nullptr)
+				for(const auto &[key, val]: *multipartFormData)
+				{
+					std::cout<<"\""<<key<<"\":\n";
+					for(const auto &e: *val)
+						std::cout<<"File name: "<<e->fileName<<"; Content type: "<<e->contentType<<"; Content: \n\""<<*e->content<<"\"\n";
+				}
+			auto *formData=request->parsedBody()->formData;
+			if(formData!=nullptr)
+				for(const auto &[key, val]: *formData)
+				{
+					std::cout<<"\""<<key<<"\": ";
+					for(const auto &e: val)
+						std::cout<<"\""<<e<<"\",";
+					std::cout<<std::endl;
+				}
+		}
 
 
 		Log(LogLevel::Debug)<<"Request parsing complete";

@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "Log/log.hpp"
+#include "utils.hpp"
 
 bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 {
@@ -170,7 +171,7 @@ uint16_t Request::parseBody()
 			//just a text, no need to parse
 			return 200;
 		}
-		case(ContentType::APPLICATION_X_WWW_FORM_URLENCODED):
+/*		case(ContentType::APPLICATION_X_WWW_FORM_URLENCODED):
 		{
 			if(formData_==nullptr)
 				formData_=new std::unordered_map<std::string, std::vector<std::string>*>();
@@ -333,7 +334,7 @@ uint16_t Request::parseBody()
 			//body parsed, no need to store it
 			body_.clear();
 			break;
-		}
+		}*/
 	};
 
 	return 200;
@@ -529,22 +530,6 @@ bool Request::parseContentDisposition(std::string_view line, std::string &name, 
 	return true;
 }
 
-size_t Request::findSemicolon(std::string_view line)
-{
-	size_t pos=0;
-	bool quoted=false;
-	while(pos<line.size())
-	{
-		if(line.at(pos)==';'&&!quoted)
-			break;
-		if(line.at(pos)=='"')
-			if((pos>0&&line.at(pos-1)!='\\')||pos==0)
-				quoted=!quoted;
-		pos++;
-	}
-	return pos;
-}
-
 std::string Request::multipartBoundary()
 {
 	std::string boundary;
@@ -608,7 +593,35 @@ Request::~Request()
 	if(cookies_!=nullptr)
 		delete cookies_;
 
-	if(multipartFormData_!=nullptr)
+	if(parsedBody_!=nullptr)
+	{
+		if(parsedBody_->multipartFormData!=nullptr)
+		{
+			auto *data=parsedBody_->multipartFormData;
+			for(auto &[key, val]: *data)
+				if(val!=nullptr)
+				{
+					for(auto &it:*data->at(key))
+						if(it!=nullptr)
+						{
+							if(it->content!=nullptr)
+								delete it->content;
+							delete it;
+						}
+					delete val;
+				}
+			delete data;
+		}
+		if(parsedBody_->formData!=nullptr)
+			delete parsedBody_->formData;
+
+		if(parsedBody_->plainText!=nullptr)
+			delete parsedBody_->plainText;
+
+		delete parsedBody_;
+	}
+
+/*	if(multipartFormData_!=nullptr)
 	{
 		for(auto &[key, val]:*multipartFormData_)
 			if(val!=nullptr)
@@ -631,6 +644,6 @@ Request::~Request()
 			if(val!=nullptr)
 				delete val;
 		delete formData_;
-	}
+	}*/
 }
 

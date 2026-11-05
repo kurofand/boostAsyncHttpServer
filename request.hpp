@@ -9,31 +9,14 @@
 
 #include "common.hpp"
 
-enum class ContentType
-{
-	NONE=0,
-	TEXT_PLAIN,
-	APPLICATION_JSON,
-	APPLICATION_X_WWW_FORM_URLENCODED,
-	MULTIPART_FORM_DATA
-};
-
-struct MultipartFormData
-{
-//	std::string fieldName;
-	std::string fileName, contentType;
-	std::string *content;
-
-//	void clear(){fieldName=""; fileName=""; contentType=""; content=nullptr;}
-	void clear(){fileName=""; contentType=""; content=nullptr;}
-};
-
 class Request
 {
 	public:
 		Request(){};
 		void body(std::string_view sv){body_=sv;}
-		void multipartFormData(auto data){multipartFormData_=data;}
+//		void multipartFormData(auto data){multipartFormData_=data;}
+		void parsedBody(ParsingResult *data){parsedBody_=data;}
+		ParsingResult* parsedBody(){return parsedBody_;}
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
 		//uint16_t to return parsing state with HTTP response codes:
 		//200 - parsing complete w/o issues;
@@ -48,9 +31,11 @@ class Request
 		std::unordered_map<std::string, std::string>* cookies(){return cookies_;}
 //		std::unordered_map<std::string, std::string*>* data(){return data_;}
 //		std::vector<formData*>* data(){return data_;}
-		std::unordered_map<std::string, std::vector<std::string>*>* formData(){return formData_;}
-		std::unordered_map<std::string, std::vector<MultipartFormData*>*>* multipartFormData(){return multipartFormData_;}
+
+//		std::unordered_map<std::string, std::vector<std::string>*>* formData(){return formData_;}
+//		std::unordered_map<std::string, std::vector<MultipartFormData*>*>* multipartFormData(){return multipartFormData_;}
 		ProtocolVersion protocolVersion(){return protocolVersion_;}
+		ContentType contentType(){return contentType_;}
 		bool keepAlive(){return keepAlive_;}
 		std::string multipartBoundary();
 		~Request();
@@ -66,8 +51,9 @@ class Request
 		std::unordered_map<std::string, std::string> *cookies_=nullptr;
 		std::unordered_map<std::string, std::string> *headers_=nullptr;
 //		std::unordered_map<std::string, std::string*> *data_=nullptr;
-		std::unordered_map<std::string, std::vector<std::string>*> *formData_=nullptr;
-		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=nullptr;
+//		std::unordered_map<std::string, std::vector<std::string>*> *formData_=nullptr;
+//		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=nullptr;
+		ParsingResult *parsedBody_=nullptr;
 		bool keepAlive_=false;
 		ProtocolVersion protocolVersion_{0,0};
 //		std::vector<formData*> *data_=nullptr;
@@ -78,7 +64,6 @@ class Request
 		bool parseProtoVersion();
 		bool parseConnectionHeader();
 		bool parseContentDisposition(std::string_view line, std::string &name, std::string &filename);
-		size_t findSemicolon(std::string_view line);
 
 //		const static inline std::unordered_map<std::string, RequestMethod> methodMap_=
 		const std::unordered_map<std::string, RequestMethod> methodMap_=
