@@ -125,7 +125,9 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			}
 			case MultipartParserState::Headers:
 			{
-				size_t pos=chunk.find("\r\n--"+*boundary_);
+				size_t pos=chunk.find("\r\n--"+*boundary_+"\r\n");
+				if(pos==std::string_view::npos)
+					pos=chunk.find("\r\n--"+*boundary_+"--\r\n");
 				//all data between first character and boundary
 				//or last character if there is no boundary in the chunk is body
 				if(pos!=std::string_view::npos)
@@ -154,7 +156,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 
 				if(chunk=="\r\n--"+*boundary_+"--\r\n")
 				{
-					currentState_==MultipartParserState::Complete;
+					currentState_=MultipartParserState::Complete;
 					return ReadResult::OK;
 				}
 

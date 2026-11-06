@@ -234,7 +234,7 @@ std::string Request::multipartBoundary()
 {
 	std::string boundary;
 
-	if(headers_==nullptr&&!headers_->contains("content-type"))
+	if(headers_==nullptr||!headers_->contains("content-type"))
 		return "";
 	std::string_view contentType(headers_->at("content-type").c_str(), headers_->at("content-type").size());
 	auto pos=contentType.find(';');
@@ -257,10 +257,12 @@ std::string Request::multipartBoundary()
 			[](unsigned char c){return std::tolower(c);});
 
 		contentType.remove_prefix(pos+1);
-		while(contentType.front()==' ')
+		while(!contentType.empty()&&contentType.front()==' ')
 			contentType.remove_prefix(1);
 		pos=findSemicolon(contentType);
 		auto val=contentType.substr(0, pos);
+		if(val.empty())
+			return "";
 		contentType.remove_prefix(val.size());
 		if(val.front()=='"')
 		{

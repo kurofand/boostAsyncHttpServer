@@ -50,14 +50,14 @@ struct ProtocolVersion
 struct MultipartFormData
 {
 	std::string fileName, contentType;
-	std::string *content;
+	std::string *content=nullptr;
 };
 
 struct ParsingResult
 {
-	std::string *plainText;
-	std::unordered_map<std::string, std::vector<std::string>> *formData;
-	std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData;
+	std::string *plainText=nullptr;
+	std::unordered_map<std::string, std::vector<std::string>> *formData=nullptr;
+	std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData=nullptr;
 };
 
 #endif
