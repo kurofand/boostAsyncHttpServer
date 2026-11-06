@@ -6,7 +6,7 @@
 #include "../Log/log.hpp"
 #include "../utils.hpp"
 
-MultipartParser::MultipartParser(std::string_view boundary, const uint16_t &contentLength):
+MultipartParser::MultipartParser(std::string *boundary, const uint16_t &contentLength):
                         boundary_(boundary), contentLength_(contentLength)
 {
 	result_=new ParsingResult();
@@ -30,7 +30,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			case MultipartParserState::WaitingForData:
 			{
 				//chunk smaller than --boundary\r\n - wait for more data
-				if(chunk.size()<boundary_.size()+4)
+				if(chunk.size()<boundary_->size()+4)
 				{
 					parsing=false;
 					break;
@@ -45,8 +45,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					return ReadResult::BAD_REQUEST;
 				}
 				std::string_view line=chunk.substr(0, pos+2);
-				std::string tmp=boundary_.data();
-				if(line!="--"+tmp+"\r\n")
+				if(line!="--"+*boundary_+"\r\n")
 				{
 					parsing=false;
 					currentState_=MultipartParserState::Error;
@@ -126,11 +125,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			}
 			case MultipartParserState::Headers:
 			{
-				size_t pos;
-				{
-					std::string tmp=boundary_.data();
-					pos=chunk.find("\r\n--"+tmp);
-				}
+				size_t pos=chunk.find("\r\n--"+*boundary_);
 				//all data between first character and boundary
 				//or last character if there is no boundary in the chunk is body
 				if(pos!=std::string_view::npos)
@@ -157,13 +152,10 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					key.clear();
 				}
 
-				{
-				std::string tmp=boundary_.data();
-				if(chunk=="\r\n--"+tmp+"--\r\n")
+				if(chunk=="\r\n--"+*boundary_+"--\r\n")
 				{
 					currentState_==MultipartParserState::Complete;
 					return ReadResult::OK;
-				}
 				}
 
 				//remove \r\n before next boundary
@@ -172,8 +164,6 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			}
 		};
 
-//		remainingPart_.clear();
-//		remainingPart_.append(chunk.data(), chunk.size());
 	}
 
 	if(!chunk.empty())
@@ -267,4 +257,6 @@ MultipartParser::~MultipartParser()
 	}
 	if(formData_!=nullptr)
 		delete formData_;
+
+	delete boundary_;
 }

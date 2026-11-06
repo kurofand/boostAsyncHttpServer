@@ -14,26 +14,15 @@ class Request
 	public:
 		Request(){};
 		void body(std::string_view sv){body_=sv;}
-//		void multipartFormData(auto data){multipartFormData_=data;}
 		void parsedBody(ParsingResult *data){parsedBody_=data;}
 		ParsingResult* parsedBody(){return parsedBody_;}
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
-		//uint16_t to return parsing state with HTTP response codes:
-		//200 - parsing complete w/o issues;
-		//400 - incorrect body format(e.g. invalid JSON);
-		//415 - unsupported content type, etc
-		uint16_t parseBody();
 		RequestMethod method(){return method_;}
 		std::string protocol(){return protocol_;}
 		std::string path(){return path_;}
 		std::unordered_map<std::string, std::string>* params(){return params_;}
 		std::unordered_map<std::string, std::string>* headers(){return headers_;}
 		std::unordered_map<std::string, std::string>* cookies(){return cookies_;}
-//		std::unordered_map<std::string, std::string*>* data(){return data_;}
-//		std::vector<formData*>* data(){return data_;}
-
-//		std::unordered_map<std::string, std::vector<std::string>*>* formData(){return formData_;}
-//		std::unordered_map<std::string, std::vector<MultipartFormData*>*>* multipartFormData(){return multipartFormData_;}
 		ProtocolVersion protocolVersion(){return protocolVersion_;}
 		ContentType contentType(){return contentType_;}
 		bool keepAlive(){return keepAlive_;}
@@ -43,29 +32,21 @@ class Request
 	private:
 		RequestMethod method_=RequestMethod::NONE;
 		ContentType contentType_=ContentType::NONE;
-		std::string urlDecode(std::string src);
 		std::string body_;
 		std::string protocol_;
 		std::string path_;
 		std::unordered_map<std::string, std::string> *params_=nullptr;
 		std::unordered_map<std::string, std::string> *cookies_=nullptr;
 		std::unordered_map<std::string, std::string> *headers_=nullptr;
-//		std::unordered_map<std::string, std::string*> *data_=nullptr;
-//		std::unordered_map<std::string, std::vector<std::string>*> *formData_=nullptr;
-//		std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData_=nullptr;
 		ParsingResult *parsedBody_=nullptr;
 		bool keepAlive_=false;
 		ProtocolVersion protocolVersion_{0,0};
-//		std::vector<formData*> *data_=nullptr;
 
-		std::string getFormHeaderVal(const char* headerName, std::string *line);
 		void fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map);
 		bool manageHeaderDuplicate(std::string &key, std::string &val);
 		bool parseProtoVersion();
 		bool parseConnectionHeader();
-		bool parseContentDisposition(std::string_view line, std::string &name, std::string &filename);
 
-//		const static inline std::unordered_map<std::string, RequestMethod> methodMap_=
 		const std::unordered_map<std::string, RequestMethod> methodMap_=
 		{
 			{"GET", RequestMethod::GET},

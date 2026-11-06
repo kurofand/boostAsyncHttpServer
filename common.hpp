@@ -51,8 +51,6 @@ struct MultipartFormData
 {
 	std::string fileName, contentType;
 	std::string *content;
-
-//	void clear(){fileName=""; contentType=""; content=nullptr;}
 };
 
 struct ParsingResult

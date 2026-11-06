@@ -11,6 +11,7 @@
 
 #include "Parsers/multipartParser.hpp"
 #include "Parsers/urlencodedParser.hpp"
+#include "Parsers/plainParser.hpp"
 
 #include "common.hpp"
 #include "config.hpp"
@@ -105,32 +106,49 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	if(contentLength>CONTENT_LENGTH_LIMIT)
 		co_return ReadResult::PAYLOAD_TOO_LARGE;
 
+	//nothing to read, return
+	if(contentLength==0)
+		co_return ReadResult::OK;
+
 	auto available=buffer.size();
 	std::string body(contentLength, '\0');
-
 
 	Parser *parser=nullptr;
 	switch(request->contentType())
 	{
+		case ContentType::TEXT_PLAIN:
+			parser=new PlainParser(contentLength);
+			break;
 		case ContentType::APPLICATION_X_WWW_FORM_URLENCODED:
 			parser=new UrlencodedParser();
 			break;
 		case ContentType::MULTIPART_FORM_DATA:
 		{
-			std::string boundary=request->multipartBoundary();
-			if(boundary.empty())
+			std::string *boundary=new std::string(request->multipartBoundary());
+			if(boundary->empty())
+			{
+				delete boundary;
 				co_return ReadResult::BAD_REQUEST;
+			}
 			parser=new MultipartParser(boundary, contentLength);
 			break;
 		}
 		default:
-			co_return ReadResult::UNSUPPORTED_MEDIA_TYPE;
+		{
+			//accept body for non POST, PUT and DELETE methods as plain text
+			const auto method=request->method();
+			if(method!=RequestMethod::POST&&method!=RequestMethod::PUT&&method!=RequestMethod::DELETE)
+				parser=new PlainParser(contentLength);
+			else
+				co_return ReadResult::UNSUPPORTED_MEDIA_TYPE;
+		}
 	};
 	if(available>=contentLength)
 	{
 		is.read(&body[0], contentLength);
 		std::string_view chunk(body.c_str(), body.size());
 		auto parseRes=parser->parseChunk(chunk);
+		request->parsedBody(parser->result());
 		delete parser;
 		co_return parseRes;
 	}
@@ -243,6 +261,7 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			case ReadResult::PAYLOAD_TOO_LARGE:
 			case ReadResult::NOT_IMPLEMENTED:
 			case ReadResult::TIMEOUT:
+			case ReadResult::UNSUPPORTED_MEDIA_TYPE:
 			{
 				response=new Response();
 				response->requestMethod(request->method());
@@ -263,23 +282,12 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			co_return;
 		}
 
-		const auto currentStatus=request->parseBody();
-		if(currentStatus!=200)
-		{
-			delete request;
-			response->setConnectionStatus();
-			response->responseCode(currentStatus);
-			co_await writeResponse(socket, response);
-			co_return;
-		}
-
 		const bool keepAlive=request->keepAlive();
 		response->keepAlive(keepAlive);
 		response->setConnectionStatus();
 
-		if(request->parsedBody()!=nullptr)
+/*		if(request->parsedBody()!=nullptr)
 		{
-			std::cout<<"aaaaqa\n";
 			auto *multipartFormData=request->parsedBody()->multipartFormData;
 			if(multipartFormData!=nullptr)
 				for(const auto &[key, val]: *multipartFormData)
@@ -297,10 +305,11 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 						std::cout<<"\""<<e<<"\",";
 					std::cout<<std::endl;
 				}
-		}
+			auto *plainText=request->parsedBody()->plainText;
+			if(plainText!=nullptr)
+				std::cout<<"\""<<*plainText<<"\"\n";
+		}*/
 
-
-		Log(LogLevel::Debug)<<"Request parsing complete";
 		delete request;
 		const bool writeSuccess=co_await writeResponse(socket, response);
 		if(!keepAlive||!writeSuccess)

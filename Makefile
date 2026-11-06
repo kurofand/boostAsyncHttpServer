@@ -4,8 +4,10 @@ CFLAGS=-std=c++20
 
 BOOSTL=-lboost_system
 
+PARSERS=Parsers/multipartParser.cpp Parsers/urlencodedParser.cpp Parsers/plainParser.cpp
+
 all:
-	$(CC) $(CFLAGS) main.cpp request.cpp response.cpp connectionManager.cpp utils.cpp Parsers/multipartParser.cpp Parsers/urlencodedParser.cpp Log/log.cpp -o httpServer
+	$(CC) $(CFLAGS) main.cpp request.cpp response.cpp connectionManager.cpp utils.cpp $(PARSERS) Log/log.cpp -o httpServer
 oldBoost:
 	$(CC) $(CFLAGS)  -o httpServer main.cpp $(BOOSTL)
 
