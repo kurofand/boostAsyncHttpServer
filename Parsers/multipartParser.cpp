@@ -62,9 +62,11 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				//trying to find current headers end point
 				//if there is \r\n\r\n sequence, all headers fields in the chunk
 				auto headersEnd=chunk.find("\r\n\r\n");
+				bool gotAllHeaders=true;
 				//it there is only a part of headers trying to find last full line
 				if(headersEnd==std::string_view::npos)
 				{
+					gotAllHeaders=false;
 					headersEnd=chunk.rfind("\r\n");
 					//if there is only a part of single line waiting for more data
 					if(headersEnd==std::string_view::npos)
@@ -120,7 +122,10 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					else if(h=="content-type")
 						formData_->contentType=v;
 				}
-				currentState_=MultipartParserState::Headers;
+				if(gotAllHeaders)
+					currentState_=MultipartParserState::Headers;
+				else
+					parsing=false;
 				break;
 			}
 			case MultipartParserState::Headers:

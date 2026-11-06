@@ -6,9 +6,12 @@
 class UrlencodedParser: public Parser
 {
 	public:
-		UrlencodedParser();
+		UrlencodedParser(uint16_t contentLength);
 		ReadResult parseChunk(std::string_view chunk) override;
 		~UrlencodedParser();
+	private:
+		uint16_t contentLength_;
+		uint16_t receivedBytes_=0;
 };
 
 #endif
