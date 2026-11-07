@@ -6,7 +6,7 @@
 #include "../Log/log.hpp"
 #include "../utils.hpp"
 
-MultipartParser::MultipartParser(std::string *boundary, const uint16_t &contentLength):
+MultipartParser::MultipartParser(std::string *boundary, const unsigned int &contentLength):
                         boundary_(boundary), contentLength_(contentLength)
 {
 	result_=new ParsingResult();
@@ -248,6 +248,11 @@ bool MultipartParser::parseContentDisposition(std::string_view line, std::string
 	return true;
 }
 
+bool MultipartParser::complete()
+{
+	return currentState_==MultipartParserState::Complete;
+}
+
 MultipartParser::~MultipartParser()
 {
 	if(result_!=nullptr)
@@ -272,7 +277,11 @@ MultipartParser::~MultipartParser()
 		delete result_;
 	}
 	if(formData_!=nullptr)
+	{
+		if(formData_->content!=nullptr)
+			delete formData_->content;
 		delete formData_;
+	}
 
 	delete boundary_;
 }

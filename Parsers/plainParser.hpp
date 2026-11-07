@@ -6,9 +6,13 @@
 class PlainParser: public Parser
 {
 	public:
-		PlainParser(uint16_t contentLength);
+		PlainParser(const unsigned int contentLength);
 		ReadResult parseChunk(std::string_view chunk) override;
+		bool complete() override;
 		~PlainParser();
+	private:
+		const unsigned int contentLength_;
+		unsigned int receivedBytes_=0;
 };
 
 #endif

@@ -1,6 +1,6 @@
 #include "plainParser.hpp"
 
-PlainParser::PlainParser(uint16_t contentLength)
+PlainParser::PlainParser(const unsigned int contentLength): contentLength_(contentLength)
 {
 	result_=new ParsingResult();
 	auto *plainText=new std::string();
@@ -10,8 +10,14 @@ PlainParser::PlainParser(uint16_t contentLength)
 
 ReadResult PlainParser::parseChunk(std::string_view chunk)
 {
+	receivedBytes_+=chunk.size();
 	result_->plainText->append(chunk.data(), chunk.size());
 	return ReadResult::OK;
+}
+
+bool PlainParser::complete()
+{
+	return receivedBytes_==contentLength_;
 }
 
 PlainParser::~PlainParser()

@@ -198,7 +198,13 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 			}
 			remaining-=bytes;
 		}
-		request->parsedBody(parser->result());
+		if(parser->complete())
+			request->parsedBody(parser->result());
+		else
+		{
+			delete parser;
+			co_return ReadResult::BAD_REQUEST;
+		}
 	}
 	delete parser;
 	co_return ReadResult::OK;

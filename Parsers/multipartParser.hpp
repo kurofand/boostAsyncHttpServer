@@ -23,11 +23,12 @@ enum class MultipartParserState
 class MultipartParser: public Parser
 {
 	public:
-		MultipartParser(std::string *boundary, const uint16_t &contentLength);
+		MultipartParser(std::string *boundary, const unsigned int &contentLength);
 		ReadResult parseChunk(std::string_view chunk) override;
+		bool complete() override;
 		~MultipartParser();
 	private:
-		const uint16_t contentLength_;
+		const unsigned int contentLength_;
 		std::string *boundary_;
 		MultipartFormData *formData_=nullptr;
 		std::string key;

@@ -6,12 +6,13 @@
 class UrlencodedParser: public Parser
 {
 	public:
-		UrlencodedParser(uint16_t contentLength);
+		UrlencodedParser(const unsigned int contentLength);
 		ReadResult parseChunk(std::string_view chunk) override;
+		bool complete() override;
 		~UrlencodedParser();
 	private:
-		uint16_t contentLength_;
-		uint16_t receivedBytes_=0;
+		const unsigned int contentLength_;
+		unsigned int receivedBytes_=0;
 };
 
 #endif

@@ -2,9 +2,8 @@
 
 #include "../utils.hpp"
 
-UrlencodedParser::UrlencodedParser(uint16_t contentLength)
+UrlencodedParser::UrlencodedParser(const unsigned int contentLength): contentLength_(contentLength)
 {
-	contentLength_=contentLength;
 	result_=new ParsingResult();
 	auto *formData=new std::unordered_map<std::string, std::vector<std::string>>;
 	result_->formData=formData;
@@ -71,6 +70,11 @@ ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
 		remainingPart_.append(chunk.data(), chunk.size());
 	}
 	return ReadResult::OK;
+}
+
+bool UrlencodedParser::complete()
+{
+	return receivedBytes_==contentLength_;
 }
 
 UrlencodedParser::~UrlencodedParser()
