@@ -67,6 +67,15 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				if(headersEnd==std::string_view::npos)
 				{
 					gotAllHeaders=false;
+
+					//case when \r\n\r\n was splitted in half by chunks
+					if(chunk.starts_with("\r\n"))
+					{
+						chunk.remove_prefix(2);
+						currentState_=MultipartParserState::Headers;
+						break;
+					}
+
 					headersEnd=chunk.rfind("\r\n");
 					//if there is only a part of single line waiting for more data
 					if(headersEnd==std::string_view::npos)

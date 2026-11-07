@@ -285,29 +285,32 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 		response->keepAlive(keepAlive);
 		response->setConnectionStatus();
 
-/*		if(request->parsedBody()!=nullptr)
+		if(request->parsedBody()!=nullptr)
 		{
+			std::string logstr="\n";
 			auto *multipartFormData=request->parsedBody()->multipartFormData;
 			if(multipartFormData!=nullptr)
 				for(const auto &[key, val]: *multipartFormData)
 				{
-					std::cout<<"\""<<key<<"\":\n";
+					logstr+=std::format("\t\"{}\":\n", key);
 					for(const auto &e: *val)
-						std::cout<<"File name: "<<e->fileName<<"; Content type: "<<e->contentType<<"; Content: \n\""<<*e->content<<"\"\n";
+						logstr+=std::format("\tFile name: {}; Content type: {}; Content:\n\t\t\"{}\"\n", e->fileName, e->contentType, *e->content);
 				}
 			auto *formData=request->parsedBody()->formData;
 			if(formData!=nullptr)
 				for(const auto &[key, val]: *formData)
 				{
-					std::cout<<"\""<<key<<"\": ";
+					logstr+=std::format("\t\"{}\": ", key);
 					for(const auto &e: val)
-						std::cout<<"\""<<e<<"\",";
-					std::cout<<std::endl;
+						logstr+=std::format("\"{}\", ", e);
+					logstr.push_back('\n');
 				}
 			auto *plainText=request->parsedBody()->plainText;
 			if(plainText!=nullptr)
-				std::cout<<"\""<<*plainText<<"\"\n";
-		}*/
+				logstr=std::format("\t\"{}\"\n", *plainText);
+
+			Log(LogLevel::Debug)<<"Request parsing result:"<<logstr;
+		}
 
 		delete request;
 		const bool writeSuccess=co_await writeResponse(socket, response);
