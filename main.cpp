@@ -11,6 +11,7 @@
 #include "Parsers/multipartParser.hpp"
 #include "Parsers/urlencodedParser.hpp"
 #include "Parsers/plainParser.hpp"
+#include "Parsers/jsonParser.hpp"
 
 #include "common.hpp"
 #include "config.hpp"
@@ -89,7 +90,10 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	unsigned int contentLength=0;
 	if(request->headers()!=nullptr&&request->headers()->contains("content-length"))
 	{
+		//additional check to avoid +, - and spases at the begin
 		const auto tmp=request->headers()->at("content-length");
+		if(!(tmp[0]>='0'&&tmp[0]<='9'))
+			co_return ReadResult::BAD_REQUEST;
 		try
 		{
 			size_t converted=0;
@@ -132,6 +136,11 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 			parser=new MultipartParser(boundary, contentLength);
 			break;
 		}
+		case ContentType::APPLICATION_JSON:
+		{
+			parser=new JsonParser();
+			break;
+		}
 		default:
 		{
 			//accept body for non POST, PUT and DELETE methods as plain text
@@ -147,7 +156,10 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 		is.read(&body[0], contentLength);
 		std::string_view chunk(body.c_str(), body.size());
 		auto parseRes=parser->parseChunk(chunk);
-		request->parsedBody(parser->result());
+		if(parseRes!=ReadResult::BAD_REQUEST&&parser->complete())
+			request->parsedBody(parser->result());
+		else
+			parseRes=ReadResult::BAD_REQUEST;
 		delete parser;
 		co_return parseRes;
 	}
@@ -315,7 +327,7 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			if(plainText!=nullptr)
 				logstr=std::format("\t\"{}\"\n", *plainText);
 
-			Log(LogLevel::Debug)<<"Request parsing result:"<<logstr;
+			Log(LogLevel::ParserDebug)<<"Request parsing result:"<<logstr;
 		}
 
 		delete request;

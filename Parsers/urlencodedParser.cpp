@@ -1,12 +1,14 @@
 #include "urlencodedParser.hpp"
 
 #include "../utils.hpp"
+#include "../Log/log.hpp"
 
 UrlencodedParser::UrlencodedParser(const unsigned int contentLength): contentLength_(contentLength)
 {
 	result_=new ParsingResult();
 	auto *formData=new std::unordered_map<std::string, std::vector<std::string>>;
 	result_->formData=formData;
+	Log(LogLevel::ParserDebug)<<"Application/x-www-form-urlencoded parser";
 }
 
 ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
@@ -15,12 +17,12 @@ ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
 	std::string tmp;
 	tmp.append(remainingPart_);
 	tmp.append(chunk.data(), chunk.size());
+	remainingPart_.clear();
 	chunk=tmp;
 
 	//no complete key=val in current chunk, store and wait for more
 	if(receivedBytes_<contentLength_&&chunk.find('&')==std::string_view::npos)
 	{
-		remainingPart_.clear();
 		remainingPart_.append(chunk.data(), chunk.size());
 		return ReadResult::OK;
 	}
@@ -32,8 +34,18 @@ ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
 		std::string_view pair;
 		if(pairEnd==std::string_view::npos)
 		{
-			pair=chunk;
-			parsing=false;
+			//current last key=val pair could be splitted by chunks
+			//so check if body is read or still awaiting more data
+			if(receivedBytes_<contentLength_)
+			{
+				remainingPart_.append(chunk.data(), chunk.size());
+				return ReadResult::OK;
+			}
+			else
+			{
+				pair=chunk;
+				parsing=false;
+			}
 		}
 		else
 		{
@@ -43,7 +55,10 @@ ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
 
 		auto delimiter=pair.find('=');
 		if(delimiter==std::string_view::npos)
+		{
+			Log(LogLevel::ParserDebug)<<"Malformed pair without \"=\" symbol, bad request";
 			return ReadResult::BAD_REQUEST;
+		}
 
 		std::string key(pair.substr(0, delimiter));
 		std::string val(pair.substr(delimiter+1));
@@ -65,10 +80,7 @@ ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
 	}
 
 	if(!chunk.empty())
-	{
-		remainingPart_.clear();
 		remainingPart_.append(chunk.data(), chunk.size());
-	}
 	return ReadResult::OK;
 }
 

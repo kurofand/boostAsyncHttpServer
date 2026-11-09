@@ -6,6 +6,8 @@
 #include <string>
 #include <unordered_map>
 
+#include <boost/json.hpp>
+
 enum class ReadResult: uint16_t
 {
 	OK=200,
@@ -58,6 +60,7 @@ struct ParsingResult
 	std::string *plainText=nullptr;
 	std::unordered_map<std::string, std::vector<std::string>> *formData=nullptr;
 	std::unordered_map<std::string, std::vector<MultipartFormData*>*> *multipartFormData=nullptr;
+	boost::json::value *jsonObj=nullptr;
 };
 
 #endif

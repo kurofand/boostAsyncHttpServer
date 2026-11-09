@@ -7,7 +7,8 @@
 
 enum class LogLevel: uint8_t
 {
-	Debug=0,
+	ParserDebug=0,
+	Debug,
 	Info,
 	Warning,
 	Error
@@ -33,6 +34,7 @@ class Log
 		std::ostringstream stream_;
 		static inline const std::unordered_map<LogLevel, std::string> levelMap_=
 		{
+			{LogLevel::ParserDebug, "PARSER"},
 			{LogLevel::Debug, "DEBUG"},
 			{LogLevel::Info, "INFO"},
 			{LogLevel::Warning, "WARNING"},

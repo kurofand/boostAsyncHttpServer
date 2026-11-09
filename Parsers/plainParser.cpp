@@ -1,11 +1,14 @@
 #include "plainParser.hpp"
 
+#include "../Log/log.hpp"
+
 PlainParser::PlainParser(const unsigned int contentLength): contentLength_(contentLength)
 {
 	result_=new ParsingResult();
 	auto *plainText=new std::string();
 	plainText->reserve(contentLength);
 	result_->plainText=plainText;
+	Log(LogLevel::ParserDebug)<<"Text/pain parser";
 }
 
 ReadResult PlainParser::parseChunk(std::string_view chunk)

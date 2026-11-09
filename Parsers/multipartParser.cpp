@@ -11,6 +11,7 @@ MultipartParser::MultipartParser(std::string *boundary, const unsigned int &cont
 {
 	result_=new ParsingResult();
 	result_->multipartFormData=new std::unordered_map<std::string, std::vector<MultipartFormData*>*>();
+	Log(LogLevel::ParserDebug)<<"Multipart/form-data parser";
 }
 
 ReadResult MultipartParser::parseChunk(std::string_view chunk)
@@ -29,9 +30,11 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			//waiting for opening boundary
 			case MultipartParserState::WaitingForData:
 			{
+				Log(LogLevel::ParserDebug)<<"Waiting for boundary";
 				//chunk smaller than --boundary\r\n - wait for more data
 				if(chunk.size()<boundary_->size()+4)
 				{
+					Log(LogLevel::ParserDebug)<<"Chunk too small, waiting for more";
 					parsing=false;
 					break;
 				}
@@ -40,6 +43,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				auto pos=chunk.find("\r\n");
 				if(pos==std::string_view::npos)
 				{
+					Log(LogLevel::ParserDebug)<<"No CRLF in chunk expected to be boundary, bad request";
 					parsing=false;
 					currentState_=MultipartParserState::Error;
 					return ReadResult::BAD_REQUEST;
@@ -47,6 +51,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				std::string_view line=chunk.substr(0, pos+2);
 				if(line!="--"+*boundary_+"\r\n")
 				{
+					Log(LogLevel::ParserDebug)<<"No boundary sequence in chunk expected to be boundary, bad request";
 					parsing=false;
 					currentState_=MultipartParserState::Error;
 					return ReadResult::BAD_REQUEST;
@@ -54,11 +59,13 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 
 				chunk.remove_prefix(line.size());
 				currentState_=MultipartParserState::Boundary;
+				Log(LogLevel::ParserDebug)<<"Boundary parsing complete";
 				break;
 			}
 			//boundary read, reading form headers
 			case MultipartParserState::Boundary:
 			{
+				Log(LogLevel::ParserDebug)<<"Parsing headers";
 				//trying to find current headers end point
 				//if there is \r\n\r\n sequence, all headers fields in the chunk
 				auto headersEnd=chunk.find("\r\n\r\n");
@@ -69,11 +76,19 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					gotAllHeaders=false;
 
 					//case when \r\n\r\n was splitted in half by chunks
-					if(chunk.starts_with("\r\n"))
+					//formData check should separate splitted headers(formData is not null)
+					//from malformed or empty headers
+					if(chunk.starts_with("\r\n")&&formData_!=nullptr)
 					{
 						chunk.remove_prefix(2);
 						currentState_=MultipartParserState::Headers;
 						break;
+					}
+					else if(chunk.starts_with("\r\n")&&formData_==nullptr)
+					{
+						Log(LogLevel::ParserDebug)<<"Empty or malformed headers, bad request";
+						currentState_=MultipartParserState::Error;
+						return ReadResult::BAD_REQUEST;
 					}
 
 					headersEnd=chunk.rfind("\r\n");
@@ -104,6 +119,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					//malformed header
 					if(delimiter==std::string::npos)
 					{
+						Log(LogLevel::ParserDebug)<<"No \":\" in header line, bad request";
 						currentState_=MultipartParserState::Error;
 						return ReadResult::BAD_REQUEST;
 					}
@@ -116,6 +132,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 						v.remove_prefix(1);
 					if(v.empty())
 					{
+						Log(LogLevel::ParserDebug)<<"Empty value, bad request";
 						currentState_=MultipartParserState::Error;
 						return ReadResult::BAD_REQUEST;
 					}
@@ -124,6 +141,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					{
 						if(!parseContentDisposition(v, key, formData_->fileName)||key.empty())
 						{
+							Log(LogLevel::ParserDebug)<<"Failed to parse content disposition, bad request";
 							currentState_=MultipartParserState::Error;
 							return ReadResult::BAD_REQUEST;
 						}
@@ -132,13 +150,17 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 						formData_->contentType=v;
 				}
 				if(gotAllHeaders)
+				{
 					currentState_=MultipartParserState::Headers;
+					Log(LogLevel::ParserDebug)<<"Headers parsing complete";
+				}
 				else
 					parsing=false;
 				break;
 			}
 			case MultipartParserState::Headers:
 			{
+				Log(LogLevel::ParserDebug)<<"Parsing body";
 				size_t pos=chunk.find("\r\n--"+*boundary_+"\r\n");
 				if(pos==std::string_view::npos)
 					pos=chunk.find("\r\n--"+*boundary_+"--\r\n");
@@ -166,11 +188,13 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					result_->multipartFormData->at(key)->push_back(formData_);
 					formData_=nullptr;
 					key.clear();
+					Log(LogLevel::ParserDebug)<<"Body parsing complete";
 				}
 
 				if(chunk=="\r\n--"+*boundary_+"--\r\n")
 				{
 					currentState_=MultipartParserState::Complete;
+					Log(LogLevel::ParserDebug)<<"Closing boundary reached, parsing complete";
 					return ReadResult::OK;
 				}
 
