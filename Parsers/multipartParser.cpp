@@ -32,7 +32,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			{
 				Log(LogLevel::ParserDebug)<<"Waiting for boundary";
 				//chunk smaller than --boundary\r\n - wait for more data
-				if(chunk.size()<boundary_->size()+4)
+				if(chunk.size()<boundary_->size()+(openingBoundaryParsed?6:4))
 				{
 					Log(LogLevel::ParserDebug)<<"Chunk too small, waiting for more";
 					parsing=false;
@@ -184,6 +184,11 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				}
 
 				break;
+			}
+			case MultipartParserState::Complete:
+			{
+				Log(LogLevel::Warning)<<"Closing boundary was found, but parser still works, bad request";
+				return ReadResult::BAD_REQUEST;
 			}
 		};
 

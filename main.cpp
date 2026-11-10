@@ -298,11 +298,12 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			delete request;
 			response->setConnectionStatus();
 			co_await writeResponse(socket, response);
+			socket.close();
 			co_return;
 		}
 
-		const bool keepAlive=request->keepAlive();
-		response->keepAlive(keepAlive&&!shuttingDown);
+		const bool keepAlive=request->keepAlive()&&!shuttingDown;
+		response->keepAlive(keepAlive);
 		response->setConnectionStatus();
 
 		if(MIN_LOG_LEVEL<=static_cast<uint8_t>(LogLevel::ParserDebug)&&request->parsedBody()!=nullptr)

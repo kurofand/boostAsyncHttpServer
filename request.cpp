@@ -118,7 +118,7 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	}
 
 	//host header is mandatory by HTTP/1.1
-	if(protocolVersion_.min==1&&!headers_->contains("host"))
+	if(protocolVersion_.min==1&&(!headers_->contains("host")||headers_->at("host").empty()))
 		return false;
 
 	if(headers_->contains("content-length")&&headers_->contains("transfer-encoding"))
@@ -197,6 +197,15 @@ bool Request::manageHeaderDuplicate(std::string &key, std::string &val)
 	{
 		headers_->at(key)+=", "+val;
 		return true;
+	}
+	else if(key=="host")
+	{
+		//for HTTP/1.1 host duplicate is protocol violation
+		if(protocolVersion_.min==1)
+			return false;
+		//for HTTP/1.0 just ignore duplicate
+		else
+			return true;
 	}
 	headers_->at(key)=val;
 	return true;
