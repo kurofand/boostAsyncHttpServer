@@ -39,25 +39,17 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					break;
 				}
 
-				//checking for correct boundary line
-				auto pos=chunk.find("\r\n");
-				if(pos==std::string_view::npos)
+				std::optional<Boundary> boundary=lookForBoundary(chunk);
+				if(!boundary||boundary->type!=BoundaryType::Regular)
 				{
-					Log(LogLevel::ParserDebug)<<"No CRLF in chunk expected to be boundary, bad request";
+					Log(LogLevel::ParserDebug)<<"Failed to find regular boundary, bad request";
 					parsing=false;
 					currentState_=MultipartParserState::Error;
 					return ReadResult::BAD_REQUEST;
 				}
-				std::string_view line=chunk.substr(0, pos+2);
-				if(line!="--"+*boundary_+"\r\n")
-				{
-					Log(LogLevel::ParserDebug)<<"No boundary sequence in chunk expected to be boundary, bad request";
-					parsing=false;
-					currentState_=MultipartParserState::Error;
-					return ReadResult::BAD_REQUEST;
-				}
+				openingBoundaryParsed=true;
 
-				chunk.remove_prefix(line.size());
+				chunk.remove_prefix(boundary->size);
 				currentState_=MultipartParserState::Boundary;
 				Log(LogLevel::ParserDebug)<<"Boundary parsing complete";
 				break;
@@ -161,19 +153,14 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 			case MultipartParserState::Headers:
 			{
 				Log(LogLevel::ParserDebug)<<"Parsing body";
-				size_t pos=chunk.find("\r\n--"+*boundary_+"\r\n");
-				if(pos==std::string_view::npos)
-					pos=chunk.find("\r\n--"+*boundary_+"--\r\n");
-				//all data between first character and boundary
-				//or last character if there is no boundary in the chunk is body
-				if(pos!=std::string_view::npos)
-					currentState_=MultipartParserState::WaitingForData;
-				else
+				const auto boundary=lookForBoundary(chunk);
+				if(!boundary)
 				{
-					//body incomplete, wait for next chunk
 					parsing=false;
 					break;
 				}
+
+				size_t pos=boundary->pos;
 
 				if(formData_->content==nullptr)
 					formData_->content=new std::string(chunk.substr(0, pos));
@@ -181,25 +168,21 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 					formData_->content->append(chunk.substr(0, pos));
 				chunk.remove_prefix(pos);
 
-				if(currentState_==MultipartParserState::WaitingForData)
-				{
-					if(!result_->multipartFormData->contains(key))
-						result_->multipartFormData->insert({key, new std::vector<MultipartFormData*>()});
-					result_->multipartFormData->at(key)->push_back(formData_);
-					formData_=nullptr;
-					key.clear();
-					Log(LogLevel::ParserDebug)<<"Body parsing complete";
-				}
-
-				if(chunk=="\r\n--"+*boundary_+"--\r\n")
+				if(!result_->multipartFormData->contains(key))
+					result_->multipartFormData->insert({key, new std::vector<MultipartFormData*>()});
+				result_->multipartFormData->at(key)->push_back(formData_);
+				formData_=nullptr;
+				key.clear();
+				Log(LogLevel::ParserDebug)<<"Body parsing complete";
+				if(boundary->type==BoundaryType::Regular)
+					currentState_=MultipartParserState::WaitingForData;
+				else
 				{
 					currentState_=MultipartParserState::Complete;
 					Log(LogLevel::ParserDebug)<<"Closing boundary reached, parsing complete";
 					return ReadResult::OK;
 				}
 
-				//remove \r\n before next boundary
-				chunk.remove_prefix(2);
 				break;
 			}
 		};
@@ -275,6 +258,41 @@ bool MultipartParser::parseContentDisposition(std::string_view line, std::string
 bool MultipartParser::complete()
 {
 	return currentState_==MultipartParserState::Complete;
+}
+
+std::optional<Boundary> MultipartParser::lookForBoundary(std::string_view chunk)
+{
+	std::optional<Boundary> boundary=Boundary();
+	size_t pos=chunk.find((openingBoundaryParsed?"\r\n--":"--")+*boundary_);
+	if(pos==std::string_view::npos)
+		return std::nullopt;
+	boundary->pos=pos;
+
+	size_t size=boundary_->size()+(openingBoundaryParsed?4:2);
+	chunk.remove_prefix(pos+size);
+	if(chunk.substr(0, 2)=="--")
+	{
+		size+=2;
+		boundary->type=BoundaryType::Closing;
+		chunk.remove_prefix(2);
+	}
+
+	while(!chunk.empty()&&(chunk.front()==' '||chunk.front()=='\t'))
+	{
+		size++;
+		chunk.remove_prefix(1);
+	}
+
+	if((chunk.empty()||chunk.substr(0, 2)=="\r\n")&&boundary->type==BoundaryType::Closing)
+	{
+		boundary->size=size;
+		return boundary;
+	}
+	if(!chunk.empty()&&chunk.substr(0, 2)!="\r\n")
+		return std::nullopt;
+
+	boundary->size=size+2;
+	return boundary;
 }
 
 MultipartParser::~MultipartParser()

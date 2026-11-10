@@ -20,6 +20,8 @@
 
 using boost::asio::ip::tcp;
 
+bool shuttingDown=false;
+
 boost::asio::awaitable<bool> writeResponse(tcp::socket &socket, Response *response)
 {
 	Log(LogLevel::Debug)<<"Preparing response stream";
@@ -92,7 +94,7 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	{
 		//additional check to avoid +, - and spases at the begin
 		const auto tmp=request->headers()->at("content-length");
-		if(!(tmp[0]>='0'&&tmp[0]<='9'))
+		if(tmp.empty()||!(tmp[0]>='0'&&tmp[0]<='9'))
 			co_return ReadResult::BAD_REQUEST;
 		try
 		{
@@ -300,10 +302,10 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 		}
 
 		const bool keepAlive=request->keepAlive();
-		response->keepAlive(keepAlive);
+		response->keepAlive(keepAlive&&!shuttingDown);
 		response->setConnectionStatus();
 
-		if(request->parsedBody()!=nullptr)
+		if(MIN_LOG_LEVEL<=static_cast<uint8_t>(LogLevel::ParserDebug)&&request->parsedBody()!=nullptr)
 		{
 			std::string logstr="\n";
 			auto *multipartFormData=request->parsedBody()->multipartFormData;
@@ -356,6 +358,7 @@ boost::asio::awaitable<void> startListen()
 			//wait for signal and stop the server
 			Log(LogLevel::Info)<<"Server shutdown initiated";
 			acceptor.close();
+			shuttingDown=true;
 			manager->stop();
 		});
 

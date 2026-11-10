@@ -28,9 +28,8 @@
 #define MAX_PENDING_CLIENTS 128
 #endif
 
-//available log levels: debug=0, info=1, warning=2, error=3
 #ifndef MIN_LOG_LEVEL
-#define MIN_LOG_LEVEL 0
+#define MIN_LOG_LEVEL 1
 #endif
 
 #ifndef READ_CHUNK_SIZE

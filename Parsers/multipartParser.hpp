@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 
@@ -20,6 +21,19 @@ enum class MultipartParserState
 	Error
 };
 
+enum class BoundaryType
+{
+	Regular,
+	Closing
+};
+
+struct Boundary
+{
+	BoundaryType type=BoundaryType::Regular;
+	size_t pos=std::string_view::npos;
+	size_t size=0;
+};
+
 class MultipartParser: public Parser
 {
 	public:
@@ -34,6 +48,8 @@ class MultipartParser: public Parser
 		std::string key;
 		MultipartParserState currentState_=MultipartParserState::WaitingForData;
 		bool parseContentDisposition(std::string_view line, std::string &name, std::string &filename);
+		std::optional<Boundary> lookForBoundary(std::string_view chunk);
+		bool openingBoundaryParsed=false;
 };
 
 #endif

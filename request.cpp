@@ -87,9 +87,11 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		readBytes+=line.size()+1;
 		if(!line.empty()&&line.back()=='\r')
 			line.pop_back();
+		if(line.empty())
+			continue;
 		auto delimiter=line.find(':');
 		if(delimiter==std::string::npos)
-			continue;
+			return false;
 		auto name=line.substr(0, delimiter);
 		std::transform(name.begin(), name.end(), name.begin(),
 			[](unsigned char c){return std::tolower(c);});
@@ -114,6 +116,10 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		else
 			headers_->insert(std::pair<std::string, std::string>(name, val));
 	}
+
+	//host header is mandatory by HTTP/1.1
+	if(protocolVersion_.min==1&&!headers_->contains("host"))
+		return false;
 
 	if(headers_->contains("content-length")&&headers_->contains("transfer-encoding"))
 		return false;
@@ -206,6 +212,17 @@ bool Request::parseConnectionHeader()
 		std::transform(val.begin(), val.end(), val.begin(),
 			[](unsigned char c){return std::tolower(c);});
 	}
+
+	//connection header is absent
+	if(val.empty())
+	{
+		//keep-alive is default for HTTP/1.1 and close is default for HTTP/1.0
+		if(protocolVersion_.min==1)
+			return true;
+		else
+			return false;
+	}
+
 	//multiple tokens
 	if(!val.empty()&&val.find(',')!=std::string::npos)
 	{
@@ -215,19 +232,35 @@ bool Request::parseConnectionHeader()
 		while(getline(ss, line, ','))
 			if(!line.empty())
 			{
-				if(line.front()==' ')
+				while(!line.empty()&&line.front()==' ')
 					line.erase(0, 1);
 				tokens.push_back(line);
 			}
+		bool close=false, keepAlive=false;
 		for(const auto &s: tokens)
 			if(s=="close")
-				return false;
+			{
+				close=true;
+				break;
+			}
+			else if(s=="keep-alive")
+				keepAlive=true;
+
+		//close has priority, if close was not found use default protocol behavior
+		if(close)
+			return false;
+		else if(protocolVersion_.min==1)
+			return true;
+		else
+			return keepAlive;
 	}
 	else
 		if(val=="close")
 			return false;
-	//keep-alive is default for HTTP/1.1
-	return protocolVersion_.min==1;
+		else if(protocolVersion_.min==1)
+			return true;
+		else
+			return val=="keep-alive";
 }
 
 std::string Request::multipartBoundary()
