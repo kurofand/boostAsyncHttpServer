@@ -8,7 +8,7 @@
 
 #include "Log/log.hpp"
 #include "utils.hpp"
-
+#include <iostream>
 bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 {
 	Log(LogLevel::Debug)<<"Parsing headers...";
@@ -99,6 +99,12 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		if(!val.empty()&&val[0]==' ')
 			val=val.substr(1);
 
+		if(!validHeaderName(name))
+		{
+			Log(LogLevel::Warning)<<"Header with invalid symbols spotted, bad request";
+			return false;
+		}
+
 		if(name=="cookie")
 		{
 			if(cookies_==nullptr)
@@ -148,16 +154,18 @@ void Request::fillMapFromString(const std::string &str, const char delimiter, st
 {
 	if(map==nullptr)
 		return;
-	std::stringstream sstream{str};
-	std::string line;
-	while(getline(sstream, line, delimiter))
+	std::string_view sv(str.data(), str.size());
+	while(!sv.empty())
 	{
-		std::size_t pos=line.find('=');
-		if(pos==std::string::npos)
+		auto pairEnd=sv.find(delimiter);
+		auto pair=sv.substr(0, pairEnd);
+		sv.remove_prefix(pairEnd==std::string_view::npos?sv.size():pairEnd+1);
+
+		auto pos=pair.find('=');
+		if(pos==std::string_view::npos)
 			continue;
-		std::string key=line.substr(0, pos);
-		std::string val=line.substr(pos+1);
-		if(map->find(key)==map->end())
+		std::string key(pair.substr(0, pos)), val(pair.substr(pos+1));
+		if(!map->contains(key))
 			map->insert(std::pair<std::string, std::string>(key, urlDecode(std::move(val))));
 		else
 			map->at(key)+=","+urlDecode(std::move(val));
@@ -326,6 +334,14 @@ std::string Request::multipartBoundary()
 	}
 
 	return "";
+}
+
+bool Request::validHeaderName(std::string &name)
+{
+	if(name.empty())
+		return false;
+	return std::ranges::all_of(name, [](unsigned char c)
+		{return isTChar(c);});
 }
 
 Request::~Request()

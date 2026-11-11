@@ -46,6 +46,7 @@ class Request
 		bool manageHeaderDuplicate(std::string &key, std::string &val);
 		bool parseProtoVersion();
 		bool parseConnectionHeader();
+		bool validHeaderName(std::string &name);
 
 		const std::unordered_map<std::string, RequestMethod> methodMap_=
 		{
