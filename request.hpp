@@ -42,7 +42,7 @@ class Request
 		bool keepAlive_=false;
 		ProtocolVersion protocolVersion_{0,0};
 
-		void fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map);
+		bool fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map);
 		bool manageHeaderDuplicate(std::string &key, std::string &val);
 		bool parseProtoVersion();
 		bool parseConnectionHeader();

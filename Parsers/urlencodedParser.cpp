@@ -67,15 +67,24 @@ ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
 		while(val.find('+')!=std::string::npos)
 			val[val.find('+')]=' ';
 
-		key=urlDecode(std::move(key));
-		val=urlDecode(std::move(val));
-		if(result_->formData->contains(key))
-			result_->formData->at(key).push_back(val);
+		std::string dKey, dVal;
+		if(!urlDecode(key, dKey))
+		{
+			Log(LogLevel::ParserDebug)<<"Failed to decode key";
+			return ReadResult::BAD_REQUEST;
+		}
+		if(!urlDecode(val, dVal))
+		{
+			Log(LogLevel::ParserDebug)<<"Failed to decode val";
+			return ReadResult::BAD_REQUEST;
+		}
+		if(result_->formData->contains(dKey))
+			result_->formData->at(dKey).push_back(dVal);
 		else
 		{
 			std::vector<std::string> v;
-			v.push_back(val);
-			result_->formData->insert(std::pair<std::string, std::vector<std::string>>(key, v));
+			v.push_back(dVal);
+			result_->formData->insert(std::pair<std::string, std::vector<std::string>>(dKey, v));
 		}
 	}
 

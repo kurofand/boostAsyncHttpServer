@@ -6,7 +6,7 @@
 #include <string_view>
 
 size_t findSemicolon(std::string_view sv);
-std::string urlDecode(std::string src);
+bool urlDecode(std::string_view src, std::string &res);
 bool isTChar(unsigned char c);
 
 #endif

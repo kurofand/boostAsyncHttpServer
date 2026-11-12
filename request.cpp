@@ -63,7 +63,8 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 		if(params_==nullptr)
 			params_=new std::unordered_map<std::string, std::string>();
 		const std::string params{line.substr(q+1)};
-		fillMapFromString(params, '&', params_);
+		if(!fillMapFromString(params, '&', params_))
+			return false;
 		line.erase(q);
 		std::string logstr="Params: \n";
 		for(const auto &[key, val]: *params_)
@@ -110,7 +111,8 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 			if(cookies_==nullptr)
 				cookies_=new std::unordered_map<std::string, std::string>();
 			const std::string sCookies=val;
-			fillMapFromString(sCookies, ';', cookies_);
+			if(!fillMapFromString(sCookies, ';', cookies_))
+				return false;
 			continue;
 		}
 
@@ -150,10 +152,10 @@ bool Request::parseHeaders(std::istream &is, const unsigned bytesToRead)
 	return true;
 }
 
-void Request::fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map)
+bool Request::fillMapFromString(const std::string &str, const char delimiter, std::unordered_map<std::string, std::string> *map)
 {
 	if(map==nullptr)
-		return;
+		return false;
 	std::string_view sv(str.data(), str.size());
 	while(!sv.empty())
 	{
@@ -164,12 +166,17 @@ void Request::fillMapFromString(const std::string &str, const char delimiter, st
 		auto pos=pair.find('=');
 		if(pos==std::string_view::npos)
 			continue;
-		std::string key(pair.substr(0, pos)), val(pair.substr(pos+1));
+
+		std::string key(pair.substr(0, pos)), val;
+		if(!urlDecode(pair.substr(pos+1), val))
+			return false;
+
 		if(!map->contains(key))
-			map->insert(std::pair<std::string, std::string>(key, urlDecode(std::move(val))));
+			map->insert(std::pair<std::string, std::string>(key, val));
 		else
-			map->at(key)+=","+urlDecode(std::move(val));
+			map->at(key)+=","+val;
 	}
+	return true;
 }
 
 bool Request::parseProtoVersion()
