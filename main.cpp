@@ -31,14 +31,29 @@ boost::asio::awaitable<bool> writeResponse(tcp::socket &socket, Response *respon
 	response->toStream(oStream);
 	Log(LogLevel::Debug)<<"Response stream prepared";
 	bool res=true;
+	bool timedout=false;
+	boost::asio::steady_timer timer(socket.get_executor());
+	timer.expires_after(std::chrono::seconds(WRITE_TIMEOUT));
+	timer.async_wait([&socket, &timedout](const boost::system::error_code &ec)
+		{
+			if(ec)
+				return;
+			timedout=true;
+			socket.cancel();
+		});
 	boost::system::error_code ec;
 	co_await boost::asio::async_write(socket, sResponse, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+	timer.cancel();
 	if(ec)
 	{
-		Log(LogLevel::Error)<<"Error on writing response: "<<ec.message();
+		if(ec==boost::asio::error::operation_aborted&&timedout)
+			Log(LogLevel::Error)<<"Write timeout";
+		else
+			Log(LogLevel::Error)<<"Error on writing response: "<<ec.message();
 		res=false;
 	}
-	Log(LogLevel::Debug)<<"Response sent";
+	if(res)
+		Log(LogLevel::Debug)<<"Response sent";
 	delete response;
 	co_return res;
 }
@@ -116,7 +131,7 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 		co_return ReadResult::OK;
 
 	auto available=buffer.size();
-	std::string body(contentLength, '\0');
+//	std::string body(contentLength, '\0');
 
 	Parser *parser=nullptr;
 	switch(request->contentType())
@@ -155,21 +170,44 @@ boost::asio::awaitable<ReadResult> readRequest(tcp::socket &socket, boost::asio:
 	};
 	if(available>=contentLength)
 	{
-		is.read(&body[0], contentLength);
-		std::string_view chunk(body.c_str(), body.size());
-		auto parseRes=parser->parseChunk(chunk);
+		auto bfrs=buffer.data();
+		ReadResult parseRes;
+		for(auto it=boost::asio::buffer_sequence_begin(bfrs);it!=boost::asio::buffer_sequence_end(bfrs);++it)
+		{
+			auto buf=*it;
+			std::string_view chunk(static_cast<const char*>(buf.data()), buf.size());
+			parseRes=parser->parseChunk(chunk);
+			if(parseRes!=ReadResult::OK)
+				break;
+		}
 		if(parseRes!=ReadResult::BAD_REQUEST&&parser->complete())
 			request->parsedBody(parser->result());
 		else
 			parseRes=ReadResult::BAD_REQUEST;
 		delete parser;
+		buffer.consume(contentLength);
 		co_return parseRes;
+
 	}
 	else
 	{
-		is.read(&body[0], available);
-		std::string_view chunk(body.c_str(), available);
-		auto parseRes=parser->parseChunk(chunk);
+		std::string_view chunk;
+		ReadResult parseRes;
+		{
+
+		auto bfrs=buffer.data();
+		for(auto it=boost::asio::buffer_sequence_begin(bfrs);it!=boost::asio::buffer_sequence_end(bfrs);++it)
+		{
+			auto buf=*it;
+			chunk=std::string_view(static_cast<const char*>(buf.data()), buf.size());
+			parseRes=parser->parseChunk(chunk);
+			if(parseRes!=ReadResult::OK)
+				break;
+		}
+		buffer.consume(available);
+
+		}
+
 		if(parseRes!=ReadResult::OK)
 		{
 			delete parser;

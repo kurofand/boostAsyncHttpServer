@@ -20,6 +20,10 @@
 #define BODY_IDLE_TIMEOUT 3
 #endif
 
+#ifndef WRITE_TIMEOUT
+#define WRITE_TIMEOUT 10
+#endif
+
 #ifndef MAX_CLIENTS
 #define MAX_CLIENTS 64
 #endif

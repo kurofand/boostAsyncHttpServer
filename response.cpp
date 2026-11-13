@@ -19,7 +19,8 @@ const std::unordered_map<uint16_t, std::string> Response::responseCodes=
 	{415, "Unsupported Media Type"},
 	{431, "Request Header Fields Too Large"},
 
-	{500, "Internal Server Error"}
+	{500, "Internal Server Error"},
+	{501, "Not Implemented"}
 };
 
 void Response::toStream(std::ostream &stream)

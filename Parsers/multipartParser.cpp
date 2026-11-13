@@ -156,6 +156,7 @@ ReadResult MultipartParser::parseChunk(std::string_view chunk)
 				const auto boundary=lookForBoundary(chunk);
 				if(!boundary)
 				{
+					Log(LogLevel::ParserDebug)<<"Boundary was not found, waiting for more data";
 					parsing=false;
 					break;
 				}

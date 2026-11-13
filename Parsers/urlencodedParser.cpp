@@ -61,6 +61,11 @@ ReadResult UrlencodedParser::parseChunk(std::string_view chunk)
 		}
 
 		std::string key(pair.substr(0, delimiter));
+		if(key.empty())
+		{
+			Log(LogLevel::ParserDebug)<<"Malformed pair with empty key\n";
+			return ReadResult::BAD_REQUEST;
+		}
 		std::string val(pair.substr(delimiter+1));
 		while(key.find('+')!=std::string::npos)
 			key[key.find('+')]=' ';
