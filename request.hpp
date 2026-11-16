@@ -15,16 +15,16 @@ class Request
 		Request(){};
 		void body(std::string_view sv){body_=sv;}
 		void parsedBody(ParsingResult *data){parsedBody_=data;}
-		ParsingResult* parsedBody(){return parsedBody_;}
+		ParsingResult* parsedBody() const {return parsedBody_;}
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
 		RequestMethod method(){return method_;}
 		std::string protocol(){return protocol_;}
 		std::string path(){return path_;}
-		std::unordered_map<std::string, std::string>* params(){return params_;}
-		std::unordered_map<std::string, std::string>* headers(){return headers_;}
-		std::unordered_map<std::string, std::string>* cookies(){return cookies_;}
+		std::unordered_map<std::string, std::string>* params() const {return params_;}
+		std::unordered_map<std::string, std::string>* headers() const {return headers_;}
+		std::unordered_map<std::string, std::string>* cookies() const {return cookies_;}
 		ProtocolVersion protocolVersion(){return protocolVersion_;}
-		ContentType contentType(){return contentType_;}
+		ContentType contentType() const {return contentType_;}
 		bool keepAlive(){return keepAlive_;}
 		std::string multipartBoundary();
 		~Request();

@@ -39,3 +39,7 @@
 #ifndef READ_CHUNK_SIZE
 #define READ_CHUNK_SIZE 1024
 #endif
+
+#ifndef THREAD_POOL_SIZE
+#define THREAD_POOL_SIZE 4
+#endif

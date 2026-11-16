@@ -22,6 +22,8 @@ using boost::asio::ip::tcp;
 
 bool shuttingDown=false;
 
+boost::asio::thread_pool apiPool{THREAD_POOL_SIZE};
+
 boost::asio::awaitable<bool> writeResponse(tcp::socket &socket, Response *response)
 {
 	Log(LogLevel::Debug)<<"Preparing response stream";
@@ -371,7 +373,15 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 			Log(LogLevel::ParserDebug)<<"Request parsing result:"<<logstr;
 		}
 
-		delete request;
+		/*
+		co_await boost::asio::co_spawn(
+			apiPool, [api=std::move(api), &response]()
+			{
+				api->execute(response);
+			}, boost::asio::use_awaitable);
+		*/
+
+		//delete request;
 		const bool writeSuccess=co_await writeResponse(socket, response);
 		if(!keepAlive||!writeSuccess)
 		{

@@ -9,7 +9,7 @@ BOOSTL=-lboost_system
 PARSERS=Parsers/multipartParser.cpp Parsers/urlencodedParser.cpp Parsers/plainParser.cpp Parsers/jsonParser.cpp
 
 all:
-	$(CC) $(CFLAGS) main.cpp request.cpp response.cpp connectionManager.cpp utils.cpp $(PARSERS) Log/log.cpp -o httpServer $(VARS)
+	$(CC) $(CFLAGS) main.cpp request.cpp response.cpp connectionManager.cpp utils.cpp $(PARSERS) Log/log.cpp api/api.cpp -o httpServer $(VARS)
 oldBoost:
 	$(CC) $(CFLAGS)  -o httpServer main.cpp $(BOOSTL)
 
