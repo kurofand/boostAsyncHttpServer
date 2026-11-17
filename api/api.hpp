@@ -7,16 +7,16 @@
 class Api
 {
 	public:
-		explicit Api(const Request *request, const ApiContract contract);
-
 		virtual void execute()=0;
 
 		virtual ~Api();
 	protected:
+		explicit Api(const Request *request, const ApiContract contract);
+
 		const Request *request_;
+		const ApiContract contract_;
 		bool valid;
 	private:
-		const ApiContract contract_;
 		bool checkParams(ParamType type);
 		bool checkBody();
 };

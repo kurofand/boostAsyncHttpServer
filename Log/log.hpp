@@ -8,6 +8,7 @@
 enum class LogLevel: uint8_t
 {
 	ParserDebug=0,
+	ApiDebug,
 	Debug,
 	Info,
 	Warning,
@@ -35,6 +36,7 @@ class Log
 		static inline const std::unordered_map<LogLevel, std::string> levelMap_=
 		{
 			{LogLevel::ParserDebug, "PARSER"},
+			{LogLevel::ApiDebug, "API"},
 			{LogLevel::Debug, "DEBUG"},
 			{LogLevel::Info, "INFO"},
 			{LogLevel::Warning, "WARNING"},

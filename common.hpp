@@ -133,8 +133,8 @@ struct RequestParam
 
 struct ParamSet
 {
-	std::span<RequestParam> required;
-	std::span<RequestParam> optional;
+	std::vector<RequestParam> required;
+	std::vector<RequestParam> optional;
 	UnknownParamPolicy policy;
 };
 

@@ -18,6 +18,8 @@
 
 #include "Log/log.hpp"
 
+#include "api/example.hpp"
+
 using boost::asio::ip::tcp;
 
 bool shuttingDown=false;
@@ -372,6 +374,19 @@ boost::asio::awaitable<void> handleConnection(tcp::socket socket)
 
 			Log(LogLevel::ParserDebug)<<"Request parsing result:"<<logstr;
 		}
+
+		Api *api=new ExampleApi(request,{
+			{
+				{},{},UnknownParamPolicy::ALLOW
+			},
+			{},
+			{},
+			{
+				{{"name",ParamDataType::STRING},{"age",ParamDataType::STRING}},{{"city",ParamDataType::STRING}},UnknownParamPolicy::REJECT
+			},
+			RequestMethod::POST,
+			ContentType::APPLICATION_JSON
+			});
 
 		/*
 		co_await boost::asio::co_spawn(

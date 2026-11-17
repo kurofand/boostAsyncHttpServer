@@ -17,7 +17,7 @@ class Request
 		void parsedBody(ParsingResult *data){parsedBody_=data;}
 		ParsingResult* parsedBody() const {return parsedBody_;}
 		bool parseHeaders(std::istream &is, const unsigned bytesToRead);
-		RequestMethod method(){return method_;}
+		RequestMethod method() const {return method_;}
 		std::string protocol(){return protocol_;}
 		std::string path(){return path_;}
 		std::unordered_map<std::string, std::string>* params() const {return params_;}
